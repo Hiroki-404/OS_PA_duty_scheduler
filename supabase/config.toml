@@ -1,0 +1,27 @@
+project_id = "hospital-duty-scheduler"
+
+[api]
+port = 54321
+
+[db]
+port = 54322
+
+[studio]
+port = 54323
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.external.kakao]
+enabled = true
+client_id = "env(KAKAO_CLIENT_ID)"
+secret = "env(KAKAO_CLIENT_SECRET)"
+
+[functions.monthly-notify]
+schedule = "0 9 23-25 * *"
+
+[functions.expire-exchanges]
+schedule = "0 * * * *"
