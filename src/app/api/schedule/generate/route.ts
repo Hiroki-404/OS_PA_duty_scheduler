@@ -109,6 +109,25 @@ export async function POST(request: NextRequest) {
     const holidays = await getHolidaysForMonth(year, month, supabase)
     console.log(`[SCHEDULE] 공휴일: ${holidays.length ? holidays.map(h => `${h.date}(${h.name})`).join(', ') : '없음'}`)
 
+    // 6-pre. 공석 위험 날짜 탐지: 모든 활성 근무자가 exclude 또는 annual_leave 신청한 날
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const vacantDates: string[] = []
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${year}-${pad(month)}-${pad(d)}`
+      const allExcluded = workers.every(w => {
+        const t = availabilities[w.id]?.[iso]
+        return t === 'exclude' || t === 'annual_leave'
+      })
+      if (allExcluded && workers.length > 0) vacantDates.push(iso)
+    }
+    if (vacantDates.length > 0) {
+      console.warn(`[SCHEDULE] 공석 위험 날짜 ${vacantDates.length}건:`, vacantDates.join(', '))
+      return NextResponse.json({
+        error: `공석 위험: 모든 근무자가 제외를 신청한 날짜가 있습니다.\n해당 날짜: ${vacantDates.join(', ')}\n가용성 데이터를 수정 후 다시 시도하세요.`,
+        vacantDates,
+      }, { status: 422 })
+    }
+
     // 6. 알고리즘 실행
     console.log('\n[SCHEDULE] ── 알고리즘 시작 ──')
     const result = generateSchedule(year, month, workers, availabilities, prevData, holidays)

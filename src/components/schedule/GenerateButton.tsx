@@ -19,7 +19,10 @@ export function GenerateButton({ year, month }: Props) {
         body: JSON.stringify({ year, month }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) {
+        alert(data.error ?? '배정 중 오류가 발생했습니다.')
+        return
+      }
       if (data.warnings?.length) {
         alert(`배정 완료 (경고 ${data.warnings.length}건)\n${data.warnings.map((w: any) => `${w.date}: ${w.reason}`).join('\n')}`)
       } else {

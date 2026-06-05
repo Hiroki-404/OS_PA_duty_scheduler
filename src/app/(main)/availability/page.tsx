@@ -9,38 +9,85 @@ import type { AvailabilityType } from '@/lib/algorithm/types'
 
 type DoneState = 'idle' | 'submitted' | 'updated'
 
+interface WorkerWithDates {
+  id: string
+  name: string
+  submittedAt?: string
+  dates?: string[]
+}
+
+function DateChip({ iso, holidays }: { iso: string; holidays: Set<string> }) {
+  const d = new Date(iso)
+  const day = d.getDate()
+  const dow = d.getDay()
+  const isHoliday = holidays.has(iso)
+
+  let cls = 'w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center'
+  if (isHoliday) {
+    cls += ' bg-orange-400 text-white'
+  } else if (dow === 6) {
+    cls += ' bg-blue-500 text-white'
+  } else if (dow === 0) {
+    cls += ' bg-red-500 text-white'
+  } else {
+    cls += ' bg-white text-black border border-black'
+  }
+
+  return <span className={cls}>{day}</span>
+}
+
 export default function AvailabilityPage() {
   const now = new Date()
   const targetYear  = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear()
   const targetMonth = now.getMonth() === 11 ? 1 : now.getMonth() + 2
 
-  const [selections, setSelections]           = useState<Record<string, AvailabilityType>>({})
-  const initialRef                             = useRef<Record<string, AvailabilityType>>({})
-  const [hasSubmitted, setHasSubmitted]        = useState(false)
-  const [holidays, setHolidays]               = useState<string[]>([])
-  const [loading, setLoading]                 = useState(false)
-  const [done, setDone]                       = useState<DoneState>('idle')
-  const [workers, setWorkers]                 = useState<Array<{ id: string; name: string; submittedAt?: string }>>([])
-  const [currentUserId, setCurrentUserId]     = useState('')
+  const [selections, setSelections]       = useState<Record<string, AvailabilityType>>({})
+  const initialRef                         = useRef<Record<string, AvailabilityType>>({})
+  const [hasSubmitted, setHasSubmitted]   = useState(false)
+  const [holidays, setHolidays]           = useState<string[]>([])
+  const [holidaySet, setHolidaySet]       = useState<Set<string>>(new Set())
+  const [loading, setLoading]             = useState(false)
+  const [done, setDone]                   = useState<DoneState>('idle')
+  const [workers, setWorkers]             = useState<WorkerWithDates[]>([])
+  const [currentUserId, setCurrentUserId] = useState('')
 
   const isDirty = JSON.stringify(selections) !== JSON.stringify(initialRef.current)
 
   useEffect(() => {
     const sb = createClient()
+    const pad = (n: number) => String(n).padStart(2, '0')
+
     Promise.all([
       sb.auth.getUser(),
       sb.from('availability_requests')
         .select('date,type,submitted_at')
         .eq('year', targetYear)
         .eq('month', targetMonth),
-      fetch(`/api/holidays?year=${targetYear}&month=${targetMonth}`)
-        .then(r => r.json()).catch(() => ({ holidays: [] })),
+      // 공휴일: holiday_cache 테이블에서 조회 (실패 시 API fallback)
+      sb.from('holiday_cache')
+        .select('date')
+        .gte('date', `${targetYear}-${pad(targetMonth)}-01`)
+        .lte('date', `${targetYear}-${pad(targetMonth)}-31`)
+        .then(({ data }) => {
+          if (data && data.length > 0) return { holidays: data }
+          // holiday_cache가 없으면 API로 fallback
+          return fetch(`/api/holidays?year=${targetYear}&month=${targetMonth}`)
+            .then(r => r.json()).catch(() => ({ holidays: [] }))
+        }),
       sb.from('profiles').select('id,name').eq('is_active', true),
-    ]).then(([{ data: { user } }, { data: avail }, holidaysData, { data: profiles }]) => {
+      // 전체 제출 데이터 (날짜 포함)
+      sb.from('availability_requests')
+        .select('user_id,date,type,submitted_at')
+        .eq('year', targetYear)
+        .eq('month', targetMonth)
+        .not('submitted_at', 'is', null)
+        .order('submitted_at', { ascending: true }),
+    ]).then(([{ data: { user } }, { data: avail }, holidaysData, { data: profiles }, { data: allSubs }]) => {
       setCurrentUserId(user?.id ?? '')
 
       const sel: Record<string, AvailabilityType> = {}
       let submitted = false
+      // 첫 번째 쿼리는 RLS로 자신의 데이터만 반환됨
       avail?.forEach((a: any) => {
         sel[a.date] = a.type
         if (a.submitted_at) submitted = true
@@ -48,17 +95,42 @@ export default function AvailabilityPage() {
       setSelections(sel)
       initialRef.current = { ...sel }
       setHasSubmitted(submitted)
-      setHolidays((holidaysData?.holidays ?? []).map((h: any) => h.date))
 
-      sb.from('availability_requests')
-        .select('user_id,submitted_at')
-        .eq('year', targetYear)
-        .eq('month', targetMonth)
-        .then(({ data: subs }) => {
-          const subMap: Record<string, string> = {}
-          subs?.forEach((s: any) => { if (s.submitted_at) subMap[s.user_id] = s.submitted_at })
-          setWorkers((profiles ?? []).map((p: any) => ({ id: p.id, name: p.name, submittedAt: subMap[p.id] })))
-        })
+      // 공휴일 처리 (holiday_cache 결과 또는 API 결과 모두 대응)
+      const hDates: string[] = []
+      const rawHolidays = (holidaysData as any)?.holidays ?? []
+      rawHolidays.forEach((h: any) => {
+        if (typeof h === 'string') hDates.push(h)
+        else if (h?.date) hDates.push(h.date)
+      })
+      setHolidays(hDates)
+      setHolidaySet(new Set(hDates))
+
+      // 제출 완료자별 날짜 목록 구성 (submitted_at 오름차순)
+      const datesByUser: Record<string, string[]> = {}
+      const submittedAtByUser: Record<string, string> = {}
+      ;(allSubs ?? []).forEach((s: any) => {
+        if (!datesByUser[s.user_id]) datesByUser[s.user_id] = []
+        datesByUser[s.user_id].push(s.date)
+        submittedAtByUser[s.user_id] = s.submitted_at
+      })
+
+      const workerList = (profiles ?? []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        submittedAt: submittedAtByUser[p.id],
+        dates: datesByUser[p.id]?.sort() ?? [],
+      }))
+
+      // 제출자 먼저, 미제출자 나중 (제출자 내에서는 submitted_at 오름차순)
+      workerList.sort((a, b) => {
+        if (a.submittedAt && b.submittedAt) return a.submittedAt.localeCompare(b.submittedAt)
+        if (a.submittedAt) return -1
+        if (b.submittedAt) return 1
+        return 0
+      })
+
+      setWorkers(workerList)
     })
   }, [targetYear, targetMonth])
 
@@ -105,7 +177,9 @@ export default function AvailabilityPage() {
     setHasSubmitted(true)
     setDone(isUpdate ? 'updated' : 'submitted')
     setWorkers(prev => prev.map(w =>
-      w.id === user.id ? { ...w, submittedAt: nowIso } : w
+      w.id === user.id
+        ? { ...w, submittedAt: nowIso, dates: Object.keys(selections).sort() }
+        : w
     ))
     setLoading(false)
   }
@@ -156,7 +230,7 @@ export default function AvailabilityPage() {
             size="sm"
             loading={loading}
             disabled={btnDisabled}
-            variant={isDirty && hasSubmitted ? 'primary' : 'primary'}
+            variant="primary"
             onClick={handleSubmit}
           >
             {btnLabel}
@@ -167,7 +241,45 @@ export default function AvailabilityPage() {
         {hasSubmitted && workers.length > 0 && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <h2 className="text-sm font-bold text-gray-700 mb-3">팀 제출 현황</h2>
-            <SubmissionStatus workers={workers} currentUserId={currentUserId} />
+            <div className="space-y-3">
+              {workers.map((w, i) => (
+                <motion.div
+                  key={w.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className={`p-4 rounded-2xl transition-all
+                    ${w.submittedAt
+                      ? 'bg-blue-50 border border-blue-100'
+                      : 'bg-gray-50 opacity-50 blur-[1px]'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0
+                      ${w.submittedAt ? 'bg-toss-blue text-white' : 'bg-gray-200 text-gray-500'}`}>
+                      {w.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-gray-800">
+                        {w.name}{w.id === currentUserId && ' (나)'}
+                      </div>
+                      {w.submittedAt
+                        ? <div className="text-xs text-green-600 mt-0.5">제출 완료</div>
+                        : <div className="text-xs text-gray-400 mt-0.5">미제출</div>
+                      }
+                    </div>
+                    {w.submittedAt && <span className="text-toss-blue text-xl shrink-0">✓</span>}
+                  </div>
+                  {/* 날짜 컬러 칩 */}
+                  {w.submittedAt && w.dates && w.dates.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {w.dates.map(iso => (
+                        <DateChip key={iso} iso={iso} holidays={holidaySet} />
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
           </div>
         )}
       </div>

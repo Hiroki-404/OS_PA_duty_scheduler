@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getHolidaysForMonth } from '@/lib/holidays/cache'
 import { ScheduleTable } from '@/components/schedule/ScheduleTable'
 import { GenerateButton } from '@/components/schedule/GenerateButton'
+import { ResetButton } from '@/components/schedule/ResetButton'
+import { YearMonthSelector } from '@/components/schedule/YearMonthSelector'
 import { DowStatsTable } from '@/components/schedule/DowStatsTable'
 
 const PALETTE = ['#4DABF7', '#FF6B6B', '#51CF66', '#FFD43B', '#CC5DE8', '#FF922B', '#20C997']
@@ -17,13 +19,19 @@ type ScheduleWithProfile = {
   profiles: { name: string | null; color: string | null } | null
 }
 
-export default async function HomePage() {
+interface Props {
+  searchParams: Promise<{ year?: string; month?: string }>
+}
+
+export default async function HomePage({ searchParams }: Props) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
+  const params = await searchParams
+  const year  = params.year  ? Number(params.year)  : now.getFullYear()
+  const month = params.month ? Number(params.month) : now.getMonth() + 1
+
   const pad = (n: number) => String(n).padStart(2, '0')
   const monthStart = `${year}-${pad(month)}-01`
   const monthEnd   = `${year}-${pad(month)}-31`
@@ -41,14 +49,14 @@ export default async function HomePage() {
       .gte('date', monthStart)
       .lte('date', monthEnd)
       .order('date'),
-    // 전체 활성 근무자 목록 (DowStatsTable용 + workerMap 보완)
+    // 전체 활성 근무자 목록 (id, name만 먼저 — color는 별도 처리)
     supabase.from('profiles').select('id, name, color').eq('is_active', true),
     supabase.from('profiles').select('is_admin').eq('id', user!.id).single(),
     supabase.from('availability_requests')
       .select('user_id, date, type')
       .eq('year', year)
       .eq('month', month),
-    getHolidaysForMonth(year, month, supabase),
+    getHolidaysForMonth(year, month, supabase).catch(() => []),
   ])
 
   const schedules = (rawSchedules as unknown as ScheduleWithProfile[]) ?? []
@@ -84,12 +92,20 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white px-6 pt-12 pb-4 sticky top-0 z-10 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-gray-900">{year}년 {month}월 당직표</h1>
             <p className="text-sm text-gray-400 mt-0.5">이번 달 당직 일정</p>
           </div>
-          {profile?.is_admin && <GenerateButton year={year} month={month} />}
+          <div className="flex items-center gap-2 shrink-0">
+            <YearMonthSelector year={year} month={month} />
+            {profile?.is_admin && (
+              <>
+                <ResetButton year={year} month={month} />
+                <GenerateButton year={year} month={month} />
+              </>
+            )}
+          </div>
         </div>
       </header>
 
