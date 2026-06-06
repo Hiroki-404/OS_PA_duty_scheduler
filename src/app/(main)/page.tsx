@@ -46,6 +46,7 @@ export default async function HomePage({ searchParams }: Props) {
     { data: profile },
     { data: availabilities },
     holidays,
+    { data: rawExchanges },
   ] = await Promise.all([
     // FK JOIN: profiles 테이블과 조인하여 name만 획득 (color는 DB에 없을 수 있으므로 제외)
     supabase.from('schedules')
@@ -61,6 +62,11 @@ export default async function HomePage({ searchParams }: Props) {
       .eq('year', year)
       .eq('month', month),
     getHolidaysForMonth(year, month, supabase).catch(() => []),
+    // 확정된 교환 요청 (캘린더 바인딩용)
+    (adminSupabase ?? supabase)
+      .from('exchange_requests')
+      .select('id, requester_id, target_id, requester_date, target_date, type')
+      .eq('status', 'accepted'),
   ])
 
   // color 컬럼 없을 때 폴백: name만 조회
@@ -75,6 +81,13 @@ export default async function HomePage({ searchParams }: Props) {
   }
 
   const schedules = (rawSchedules as unknown as ScheduleWithProfile[]) ?? []
+
+  // 이번 달 확정 교환만 필터링
+  const exchanges = (rawExchanges ?? []).filter(ex => {
+    const rd = ex.requester_date as string
+    const td = ex.target_date as string | null
+    return (rd >= monthStart && rd <= monthEnd) || (td != null && td >= monthStart && td <= monthEnd)
+  })
 
   // workerMap 구축 (이중 보완 전략)
   // 1순위: profiles 쿼리 결과 (모든 활성 근무자 포함)
@@ -117,7 +130,7 @@ export default async function HomePage({ searchParams }: Props) {
             {profile?.is_admin && (
               <>
                 <ResetButton year={year} month={month} />
-                <GenerateButton year={year} month={month} />
+                <GenerateButton year={year} month={month} hasSchedules={hasSchedules} />
               </>
             )}
           </div>
@@ -133,6 +146,7 @@ export default async function HomePage({ searchParams }: Props) {
             month={month}
             holidays={holidays}
             availabilities={availabilities ?? []}
+            exchanges={exchanges}
           />
         </div>
 

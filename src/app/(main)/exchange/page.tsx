@@ -32,7 +32,7 @@ export default function ExchangePage() {
 
       const [{ data: profs }, { data: mySchedules }, { data: reqs }] = await Promise.all([
         sb.from('profiles').select('id,name').eq('is_active', true),
-        sb.from('schedules').select('date').eq('user_id', user.id).gte('date', `${year}-${pad(month)}-01`).lte('date', `${year}-${pad(month)}-31`),
+        sb.from('schedules').select('date').eq('user_id', user.id).gte('date', `${year}-${pad(month)}-01`).lte('date', `${year}-${pad(month)}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`),
         sb.from('exchange_requests').select('*').or(`requester_id.eq.${user.id},target_id.eq.${user.id}`).order('requested_at', { ascending: false }),
       ])
 

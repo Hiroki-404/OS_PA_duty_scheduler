@@ -1,16 +1,33 @@
 'use client'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { useRouter } from 'next/navigation'
 
-interface Props { year: number; month: number }
+interface Props { year: number; month: number; hasSchedules: boolean }
 
-export function GenerateButton({ year, month }: Props) {
+export function GenerateButton({ year, month, hasSchedules }: Props) {
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
 
   const handleGenerate = async () => {
-    if (!confirm(`${year}년 ${month}월 당직을 자동 배정하시겠습니까?`)) return
+    const now = new Date()
+    const nowTotal  = now.getFullYear() * 12 + (now.getMonth() + 1)
+    const viewTotal = year * 12 + month
+
+    // CASE A: 과거 달 — 재배치 완전 차단
+    if (viewTotal < nowTotal) {
+      alert('지난달 당직은 재배치가 불가능합니다.')
+      return
+    }
+
+    // CASE B: 이번 달 — 운행 중 경고 confirm
+    if (viewTotal === nowTotal) {
+      if (!confirm('이미 배정되어 운행 중인 달입니다. 진짜로 재배치하시겠습니까?')) return
+    }
+
+    // CASE C: 미래 달 — 기존 데이터 있으면 재배치 confirm
+    if (viewTotal > nowTotal && hasSchedules) {
+      if (!confirm('이미 당직이 배치된 달입니다. 재배치 하시겠습니까?')) return
+    }
+
     setLoading(true)
     try {
       const res = await fetch('/api/schedule/generate', {

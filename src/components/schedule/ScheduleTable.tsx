@@ -9,6 +9,14 @@ interface ScheduleEntry {
 interface AvailEntry { user_id: string; date: string; type: 'exclude' | 'half_day' | 'annual_leave' }
 interface Holiday { date: string; name: string }
 interface WorkerInfo { name: string; color: string }
+interface ExchangeInfo {
+  id: string
+  requester_id: string
+  target_id: string
+  requester_date: string
+  target_date: string | null
+  type: 'swap' | 'transfer'
+}
 
 interface Props {
   schedules: ScheduleEntry[]
@@ -17,6 +25,7 @@ interface Props {
   month: number
   holidays: Holiday[]
   availabilities: AvailEntry[]
+  exchanges?: ExchangeInfo[]
   isAdmin?: boolean
   onCellClick?: (date: string, currentUserId: string | null) => void
 }
@@ -32,11 +41,11 @@ const AVAIL_STYLE: Record<string, { label: string; bg: string; text: string; dot
 
 export function ScheduleTable({
   schedules, workerMap, year, month,
-  holidays, availabilities, isAdmin, onCellClick,
+  holidays, availabilities, exchanges, isAdmin, onCellClick,
 }: Props) {
   const [sheetDate, setSheetDate] = useState<string | null>(null)
 
-  const today      = new Date().toISOString().slice(0, 10)
+  const today       = new Date().toISOString().slice(0, 10)
   const scheduleMap = Object.fromEntries(schedules.map(s => [s.date, s]))
   const holidayMap  = Object.fromEntries(holidays.map(h => [h.date, h.name]))
 
@@ -44,6 +53,15 @@ export function ScheduleTable({
   for (const a of availabilities) {
     if (!availMap[a.date]) availMap[a.date] = []
     availMap[a.date].push(a)
+  }
+
+  // 교환 확정 맵: date → { partnerId, partnerDate, type }
+  const exchangeMap: Record<string, { partnerId: string; partnerDate: string | null; type: string }> = {}
+  for (const ex of (exchanges ?? [])) {
+    exchangeMap[ex.requester_date] = { partnerId: ex.target_id,   partnerDate: ex.target_date,    type: ex.type }
+    if (ex.type === 'swap' && ex.target_date) {
+      exchangeMap[ex.target_date] = { partnerId: ex.requester_id, partnerDate: ex.requester_date, type: ex.type }
+    }
   }
 
   const firstDow    = new Date(year, month - 1, 1).getDay()
@@ -56,12 +74,12 @@ export function ScheduleTable({
   ]
   while (cells.length % 7 !== 0) cells.push(null)
 
-  // 선택한 날짜 정보
   const sheetSchedule = sheetDate ? scheduleMap[sheetDate] : null
   const sheetWorker   = sheetSchedule ? workerMap[sheetSchedule.user_id] : null
   const sheetAvails   = sheetDate ? (availMap[sheetDate] ?? []) : []
   const sheetDayObj   = sheetDate ? new Date(sheetDate + 'T00:00:00') : null
   const sheetHolName  = sheetDate ? holidayMap[sheetDate] : null
+  const sheetExchange = sheetDate ? exchangeMap[sheetDate] : null
 
   return (
     <>
@@ -89,6 +107,7 @@ export function ScheduleTable({
           const holName = holidayMap[iso]
           const worker  = s ? workerMap[s.user_id] : undefined
           const avails  = availMap[iso] ?? []
+          const exInfo  = exchangeMap[iso]
 
           const dateBg = isHol ? 'bg-amber-50'
             : (isSat || isSun) ? 'bg-blue-50/30'
@@ -98,6 +117,13 @@ export function ScheduleTable({
             : isSat ? 'text-blue-500'
             : 'text-gray-700'
 
+          // 교환 완료 → 빨간 테두리, 오늘 → 파란 테두리 (우선순위: 교환 > 오늘)
+          const ringClass = exInfo
+            ? 'ring-2 ring-inset ring-red-500'
+            : isToday
+            ? 'ring-2 ring-inset ring-toss-blue'
+            : ''
+
           return (
             <motion.div
               key={iso}
@@ -106,14 +132,12 @@ export function ScheduleTable({
                 setSheetDate(iso)
                 if (isAdmin && onCellClick) onCellClick(iso, s?.user_id ?? null)
               }}
-              className={`min-h-[72px] border-r border-b border-gray-100 p-1 flex flex-col gap-0.5 cursor-pointer
-                ${dateBg}
-                ${isToday ? 'ring-2 ring-inset ring-toss-blue' : ''}`}
+              className={`min-h-[72px] border-r border-b border-gray-100 p-1 flex flex-col gap-0.5 cursor-pointer ${dateBg} ${ringClass}`}
             >
               {/* 날짜 번호 */}
               <div className="flex items-center justify-between">
                 <span className={`text-[11px] font-bold leading-none ${dateColor}
-                  ${isToday ? 'bg-toss-blue text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]' : ''}`}>
+                  ${isToday && !exInfo ? 'bg-toss-blue text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px]' : ''}`}>
                   {day}
                 </span>
               </div>
@@ -123,7 +147,7 @@ export function ScheduleTable({
                 <span className="text-[8px] text-amber-600 font-medium leading-none truncate">{holName}</span>
               )}
 
-              {/* 당직자 배지 — 날짜 바로 아래 */}
+              {/* 당직자 배지 */}
               {worker ? (
                 <div
                   className="rounded-md px-1 py-0.5 text-center text-[9px] font-bold text-white leading-tight truncate"
@@ -137,23 +161,29 @@ export function ScheduleTable({
                 </div>
               )}
 
+              {/* 교환 확정 서브라인 */}
+              {exInfo && (
+                <div className="text-[7px] text-red-500 font-semibold leading-none truncate">
+                  {exInfo.type === 'swap'
+                    ? `↔${workerMap[exInfo.partnerId]?.name ?? '?'}(${exInfo.partnerDate?.slice(-2)}일)`
+                    : `→${workerMap[exInfo.partnerId]?.name ?? '?'}`}
+                </div>
+              )}
+
               {/* 가용성 표시 (최대 2명) */}
               <div className="flex flex-col gap-px mt-auto">
                 {avails.slice(0, 2).map(a => {
-                  const st = AVAIL_STYLE[a.type]
-                  const worker = workerMap[a.user_id]
-                  const wn = worker?.name ?? '?'
-                  const wc = worker?.color ?? '#aaa'
+                  const st  = AVAIL_STYLE[a.type]
+                  const wkr = workerMap[a.user_id]
+                  const wn  = wkr?.name ?? '?'
+                  const wc  = wkr?.color ?? '#aaa'
                   return (
                     <div
                       key={a.user_id}
                       className="flex items-center gap-0.5 rounded px-0.5"
                       style={{ backgroundColor: wc + '22' }}
                     >
-                      <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ backgroundColor: wc }}
-                      />
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: wc }} />
                       <span className="text-[7px] font-medium truncate" style={{ color: wc }}>
                         {wn.charAt(0)} {st.label}
                       </span>
@@ -193,6 +223,9 @@ export function ScheduleTable({
                 </p>
                 <h3 className="text-lg font-bold text-gray-900 mt-0.5">
                   {month}월 {sheetDate?.slice(8)}일
+                  {sheetExchange && (
+                    <span className="ml-2 text-sm font-normal text-red-500">교환됨</span>
+                  )}
                 </h3>
               </div>
 
@@ -201,12 +234,25 @@ export function ScheduleTable({
                 <section>
                   <p className="text-xs font-bold text-gray-400 mb-2">당직자</p>
                   {sheetWorker ? (
-                    <div className="flex items-center gap-3 p-3 rounded-2xl"
-                      style={{ backgroundColor: sheetWorker.color + '18' }}>
-                      <div className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: sheetWorker.color }} />
-                      <span className="font-bold text-gray-900">{sheetWorker.name}</span>
-                      <span className="ml-auto text-xs text-gray-400">당직</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 p-3 rounded-2xl"
+                        style={{ backgroundColor: sheetWorker.color + '18' }}>
+                        <div className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: sheetWorker.color }} />
+                        <span className="font-bold text-gray-900">{sheetWorker.name}</span>
+                        <span className="ml-auto text-xs text-gray-400">당직</span>
+                      </div>
+                      {/* 교환 기록 서브라인 */}
+                      {sheetExchange && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100">
+                          <span className="text-red-400 text-xs shrink-0">🔄</span>
+                          <span className="text-xs text-red-600 font-medium">
+                            {sheetExchange.type === 'swap'
+                              ? `${workerMap[sheetExchange.partnerId]?.name ?? '?'}와 맞교환 (원 날짜: ${sheetExchange.partnerDate?.slice(-2)}일)`
+                              : `${workerMap[sheetExchange.partnerId]?.name ?? '?'}에게 일방 교체됨`}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-400 italic">배정 없음</p>

@@ -53,15 +53,14 @@ export async function POST(request: NextRequest) {
     const allActive = profilesData ?? []
     console.log(`[SCHEDULE] 전체 활성 근무자: ${allActive.map(p => p.name).join(', ')} (${allActive.length}명)`)
 
-    const targetProfiles = submittedUserIds.size > 0
-      ? allActive.filter(p => submittedUserIds.has(p.id))
-      : allActive
+    // is_active=true 전원 무조건 포함 — 가용성 미제출(0개 선택) = 모든 날 가용
+    const targetProfiles = allActive
 
     console.log(`[SCHEDULE] 배정 대상자 (${targetProfiles.length}명): ${targetProfiles.map(p => p.name).join(', ')}`)
 
     if (!targetProfiles.length) {
-      console.warn('[SCHEDULE] 배정 대상자 없음 → 중단')
-      return NextResponse.json({ error: '제출 완료한 근무자가 없습니다' }, { status: 400 })
+      console.warn('[SCHEDULE] 활성 근무자 없음 → 중단')
+      return NextResponse.json({ error: '활성화된 근무자가 없습니다' }, { status: 400 })
     }
 
     const workers: WorkerInfo[] = targetProfiles.map(p => {
@@ -167,13 +166,15 @@ export async function POST(request: NextRequest) {
         is_weekend: [0, 6].includes(d.getDay()),
         is_holiday: holidays.some(h => h.date === date),
         is_locked:  false,
-        created_by: user.id,
       }
     })
 
     const { error: insertError } = await db.from('schedules').insert(rows)
-    if (insertError) console.error('[SCHEDULE] INSERT 오류:', insertError.message)
-    else console.log(`[SCHEDULE] schedules INSERT 완료: ${rows.length}건`)
+    if (insertError) {
+      console.error('[SCHEDULE] INSERT 오류:', insertError.message)
+      return NextResponse.json({ error: `스케줄 저장 실패: ${insertError.message}` }, { status: 500 })
+    }
+    console.log(`[SCHEDULE] schedules INSERT 완료: ${rows.length}건`)
 
     // 8. monthly_balance 저장
     const balances = computeMonthlyBalance(year, month, result.assignments, workers, holidays)
