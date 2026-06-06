@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getHolidaysForMonth } from '@/lib/holidays/cache'
 import { ScheduleTable } from '@/components/schedule/ScheduleTable'
 import { GenerateButton } from '@/components/schedule/GenerateButton'
@@ -25,6 +27,7 @@ interface Props {
 
 export default async function HomePage({ searchParams }: Props) {
   const supabase = await createClient()
+  const adminSupabase = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : null
   const { data: { user } } = await supabase.auth.getUser()
 
   const now = new Date()
@@ -49,8 +52,8 @@ export default async function HomePage({ searchParams }: Props) {
       .gte('date', monthStart)
       .lte('date', monthEnd)
       .order('date'),
-    // 전체 활성 근무자 목록
-    supabase.from('profiles').select('id, name, color').eq('is_active', true).order('created_at'),
+    // 전체 활성 근무자 목록 (admin client로 RLS 우회, 없으면 일반 client 폴백)
+    (adminSupabase ?? supabase).from('profiles').select('id, name, color').eq('is_active', true).order('created_at'),
     supabase.from('profiles').select('is_admin').eq('id', user!.id).single(),
     supabase.from('availability_requests')
       .select('user_id, date, type')
@@ -132,7 +135,7 @@ export default async function HomePage({ searchParams }: Props) {
           />
         </div>
 
-        {hasSchedules && Object.keys(workerMap).length > 0 && (
+        {hasSchedules && (
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <h2 className="text-sm font-bold text-gray-700 mb-3">요일별 당직 통계</h2>
             <DowStatsTable
