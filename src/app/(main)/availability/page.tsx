@@ -57,37 +57,45 @@ export default function AvailabilityPage() {
     const sb = createClient()
     const pad = (n: number) => String(n).padStart(2, '0')
 
-    Promise.all([
-      sb.auth.getUser(),
-      sb.from('availability_requests')
-        .select('date,type,submitted_at')
-        .eq('year', targetYear)
-        .eq('month', targetMonth),
-      // 공휴일: holiday_cache 테이블에서 조회 (실패 시 API fallback)
-      sb.from('holiday_cache')
-        .select('date')
-        .gte('date', `${targetYear}-${pad(targetMonth)}-01`)
-        .lte('date', `${targetYear}-${pad(targetMonth)}-31`)
-        .then(({ data }) => {
-          if (data && data.length > 0) return { holidays: data }
-          // holiday_cache가 없으면 API로 fallback
-          return fetch(`/api/holidays?year=${targetYear}&month=${targetMonth}`)
-            .then(r => r.json()).catch(() => ({ holidays: [] }))
-        }),
-      sb.from('profiles').select('id,name').eq('is_active', true),
-      // 전체 제출 데이터 (날짜 포함)
-      sb.from('availability_requests')
-        .select('user_id,date,type,submitted_at')
-        .eq('year', targetYear)
-        .eq('month', targetMonth)
-        .not('submitted_at', 'is', null)
-        .order('submitted_at', { ascending: true }),
-    ]).then(([{ data: { user } }, { data: avail }, holidaysData, { data: profiles }, { data: allSubs }]) => {
-      setCurrentUserId(user?.id ?? '')
+    ;(async () => {
+      const { data: { user } } = await sb.auth.getUser()
+      if (!user) return
+      setCurrentUserId(user.id)
+
+      const [
+        { data: avail },
+        holidaysData,
+        { data: profiles },
+        { data: allSubs },
+      ] = await Promise.all([
+        // 명시적 user_id 필터 — RLS 우회 방지
+        sb.from('availability_requests')
+          .select('date,type,submitted_at')
+          .eq('user_id', user.id)
+          .eq('year', targetYear)
+          .eq('month', targetMonth),
+        // 공휴일
+        sb.from('holiday_cache')
+          .select('date')
+          .gte('date', `${targetYear}-${pad(targetMonth)}-01`)
+          .lte('date', `${targetYear}-${pad(targetMonth)}-31`)
+          .then(({ data }) => {
+            if (data && data.length > 0) return { holidays: data }
+            return fetch(`/api/holidays?year=${targetYear}&month=${targetMonth}`)
+              .then(r => r.json()).catch(() => ({ holidays: [] }))
+          }),
+        sb.from('profiles').select('id,name').eq('is_active', true),
+        // 팀 전체 제출 현황
+        sb.from('availability_requests')
+          .select('user_id,date,type,submitted_at')
+          .eq('year', targetYear)
+          .eq('month', targetMonth)
+          .not('submitted_at', 'is', null)
+          .order('submitted_at', { ascending: true }),
+      ])
 
       const sel: Record<string, AvailabilityType> = {}
       let submitted = false
-      // 첫 번째 쿼리는 RLS로 자신의 데이터만 반환됨
       avail?.forEach((a: any) => {
         sel[a.date] = a.type
         if (a.submitted_at) submitted = true
@@ -96,7 +104,6 @@ export default function AvailabilityPage() {
       initialRef.current = { ...sel }
       setHasSubmitted(submitted)
 
-      // 공휴일 처리 (holiday_cache 결과 또는 API 결과 모두 대응)
       const hDates: string[] = []
       const rawHolidays = (holidaysData as any)?.holidays ?? []
       rawHolidays.forEach((h: any) => {
@@ -106,7 +113,6 @@ export default function AvailabilityPage() {
       setHolidays(hDates)
       setHolidaySet(new Set(hDates))
 
-      // 제출 완료자별 날짜 목록 구성 (submitted_at 오름차순)
       const datesByUser: Record<string, string[]> = {}
       const submittedAtByUser: Record<string, string> = {}
       ;(allSubs ?? []).forEach((s: any) => {
@@ -121,17 +127,14 @@ export default function AvailabilityPage() {
         submittedAt: submittedAtByUser[p.id],
         dates: datesByUser[p.id]?.sort() ?? [],
       }))
-
-      // 제출자 먼저, 미제출자 나중 (제출자 내에서는 submitted_at 오름차순)
       workerList.sort((a, b) => {
         if (a.submittedAt && b.submittedAt) return a.submittedAt.localeCompare(b.submittedAt)
         if (a.submittedAt) return -1
         if (b.submittedAt) return 1
         return 0
       })
-
       setWorkers(workerList)
-    })
+    })()
   }, [targetYear, targetMonth])
 
   const handleChange = useCallback((iso: string, type: AvailabilityType | null) => {
@@ -148,24 +151,41 @@ export default function AvailabilityPage() {
     setLoading(true)
     const sb = createClient()
     const { data: { user } } = await sb.auth.getUser()
-    if (!user) return
+    if (!user) { setLoading(false); return }
 
     const pad = (n: number) => String(n).padStart(2, '0')
     const nowIso = new Date().toISOString()
 
-    await sb.from('availability_requests')
-      .delete().eq('user_id', user.id).eq('year', targetYear).eq('month', targetMonth)
+    // 1단계: 기존 데이터 삭제 (실패 시 중단)
+    const { error: delErr } = await sb.from('availability_requests')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('year', targetYear)
+      .eq('month', targetMonth)
 
+    if (delErr) {
+      console.error('[제출] 삭제 실패:', delErr)
+      setLoading(false)
+      return
+    }
+
+    // 2단계: 새 데이터 삽입 (삭제 후라 충돌 없음)
     const entries = Object.entries(selections)
     if (entries.length > 0) {
-      await sb.from('availability_requests').upsert(
+      const { error: insErr } = await sb.from('availability_requests').insert(
         entries.map(([date, type]) => ({
           user_id: user.id, year: targetYear, month: targetMonth,
           date, type, submitted_at: nowIso,
         }))
       )
+      if (insErr) {
+        console.error('[제출] 삽입 실패:', insErr)
+        setLoading(false)
+        return
+      }
     } else {
-      await sb.from('availability_requests').upsert([{
+      // 선택 없이 제출 — 제출 완료 표시용 더미 행
+      await sb.from('availability_requests').insert([{
         user_id: user.id, year: targetYear, month: targetMonth,
         date: `${targetYear}-${pad(targetMonth)}-01`,
         type: 'exclude' as const, submitted_at: nowIso,

@@ -28,7 +28,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </motion.div>
         </AnimatePresence>
       </main>
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex z-50">
+      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex z-20">
         {tabs.map(tab => {
           const active = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
           return (
