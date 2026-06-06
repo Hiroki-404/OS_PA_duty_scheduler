@@ -37,7 +37,8 @@ export default async function HomePage({ searchParams }: Props) {
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const monthStart = `${year}-${pad(month)}-01`
-  const monthEnd   = `${year}-${pad(month)}-31`
+  const lastDay    = new Date(year, month, 0).getDate()
+  const monthEnd   = `${year}-${pad(month)}-${pad(lastDay)}`
 
   const [
     { data: rawSchedules },

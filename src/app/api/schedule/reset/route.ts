@@ -21,7 +21,8 @@ export async function DELETE(request: NextRequest) {
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const rangeStart = `${year}-${pad(month)}-01`
-  const rangeEnd   = `${year}-${pad(month)}-31`
+  const lastDay    = new Date(year, month, 0).getDate()
+  const rangeEnd   = `${year}-${pad(month)}-${pad(lastDay)}`
 
   const { error } = await supabase
     .from('schedules')

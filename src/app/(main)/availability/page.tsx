@@ -78,7 +78,7 @@ export default function AvailabilityPage() {
         sb.from('holiday_cache')
           .select('date')
           .gte('date', `${targetYear}-${pad(targetMonth)}-01`)
-          .lte('date', `${targetYear}-${pad(targetMonth)}-31`)
+          .lte('date', `${targetYear}-${pad(targetMonth)}-${String(new Date(targetYear, targetMonth, 0).getDate()).padStart(2, '0')}`)
           .then(({ data }) => {
             if (data && data.length > 0) return { holidays: data }
             return fetch(`/api/holidays?year=${targetYear}&month=${targetMonth}`)
@@ -183,14 +183,8 @@ export default function AvailabilityPage() {
         setLoading(false)
         return
       }
-    } else {
-      // 선택 없이 제출 — 제출 완료 표시용 더미 행
-      await sb.from('availability_requests').insert([{
-        user_id: user.id, year: targetYear, month: targetMonth,
-        date: `${targetYear}-${pad(targetMonth)}-01`,
-        type: 'exclude' as const, submitted_at: nowIso,
-      }])
     }
+    // 선택 0개: 기존 레코드만 삭제하고 아무것도 삽입하지 않음 — "모든 날짜 가용" 의미
 
     const isUpdate = hasSubmitted
     initialRef.current = { ...selections }

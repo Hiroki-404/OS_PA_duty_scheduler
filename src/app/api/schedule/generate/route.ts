@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
   try {
     const pad = (n: number) => String(n).padStart(2, '0')
     const rangeStart = `${year}-${pad(month)}-01`
-    const rangeEnd   = `${year}-${pad(month)}-31`
+    const lastDay    = new Date(year, month, 0).getDate()
+    const rangeEnd   = `${year}-${pad(month)}-${pad(lastDay)}`
 
     // 1. 제출 완료된 availability_requests 조회
     const { data: availData, error: availError } = await db
@@ -216,11 +217,12 @@ export async function PATCH(request: NextRequest) {
 
   const { year, month, lock } = await request.json()
   const pad = (n: number) => String(n).padStart(2, '0')
+  const lastDay = new Date(year, month, 0).getDate()
 
   await supabase.from('schedules')
     .update({ is_locked: lock ?? true })
     .gte('date', `${year}-${pad(month)}-01`)
-    .lte('date', `${year}-${pad(month)}-31`)
+    .lte('date', `${year}-${pad(month)}-${pad(lastDay)}`)
 
   if (lock) {
     const { data: workers } = await supabase.from('profiles').select('id').eq('is_active', true)
