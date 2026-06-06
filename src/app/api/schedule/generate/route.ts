@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { generateSchedule, computeMonthlyBalance } from '@/lib/algorithm/scheduler'
 import { getHolidaysForMonth } from '@/lib/holidays/cache'
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // RLS 완전 우회: 데이터 조회/저장에 admin client 사용
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase
 
   const { year, month } = await request.json()
   if (!year || !month) return NextResponse.json({ error: 'year, month required' }, { status: 400 })
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
     const rangeEnd   = `${year}-${pad(month)}-31`
 
     // 1. 제출 완료된 availability_requests 조회
-    const { data: availData, error: availError } = await supabase
+    const { data: availData, error: availError } = await db
       .from('availability_requests')
       .select('user_id, date, type')
       .eq('year', year)
@@ -39,8 +43,8 @@ export async function POST(request: NextRequest) {
 
     // 2. 활성 근무자 조회
     const [{ data: profilesData, error: profilesError }, { data: periods }] = await Promise.all([
-      supabase.from('profiles').select('id, name').eq('is_active', true),
-      supabase.from('worker_periods').select('user_id, start_date, end_date'),
+      db.from('profiles').select('id, name').eq('is_active', true),
+      db.from('worker_periods').select('user_id, start_date, end_date'),
     ])
 
     if (profilesError) console.error('[SCHEDULE] profiles 조회 오류:', profilesError.message)
@@ -88,7 +92,7 @@ export async function POST(request: NextRequest) {
     // 4. 이전 달 이월 데이터
     const prevMonth = month === 1 ? 12 : month - 1
     const prevYear  = month === 1 ? year - 1 : year
-    const { data: prevBalances } = await supabase
+    const { data: prevBalances } = await db
       .from('monthly_balance')
       .select('*')
       .eq('year', prevYear)
@@ -106,7 +110,7 @@ export async function POST(request: NextRequest) {
     console.log(`[SCHEDULE] 이월 데이터: ${prevData.length ? `${prevYear}년 ${prevMonth}월 기록 ${prevData.length}건` : '없음 (초기 배정)'}`)
 
     // 5. 공휴일
-    const holidays = await getHolidaysForMonth(year, month, supabase)
+    const holidays = await getHolidaysForMonth(year, month, db)
     console.log(`[SCHEDULE] 공휴일: ${holidays.length ? holidays.map(h => `${h.date}(${h.name})`).join(', ') : '없음'}`)
 
     // 6-pre. 공석 위험 날짜 탐지: 모든 활성 근무자가 exclude 또는 annual_leave 신청한 날
@@ -151,7 +155,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. 기존 스케줄 삭제 후 INSERT
-    const { error: deleteError } = await supabase.from('schedules').delete().gte('date', rangeStart).lte('date', rangeEnd)
+    const { error: deleteError } = await db.from('schedules').delete().gte('date', rangeStart).lte('date', rangeEnd)
     if (deleteError) console.error('[SCHEDULE] 기존 스케줄 삭제 오류:', deleteError.message)
 
     const rows = [...result.assignments.entries()].map(([date, userId]) => {
@@ -166,13 +170,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    const { error: insertError } = await supabase.from('schedules').insert(rows)
+    const { error: insertError } = await db.from('schedules').insert(rows)
     if (insertError) console.error('[SCHEDULE] INSERT 오류:', insertError.message)
     else console.log(`[SCHEDULE] schedules INSERT 완료: ${rows.length}건`)
 
     // 8. monthly_balance 저장
     const balances = computeMonthlyBalance(year, month, result.assignments, workers, holidays)
-    const { error: balanceError } = await supabase.from('monthly_balance').upsert(
+    const { error: balanceError } = await db.from('monthly_balance').upsert(
       balances.map(b => ({
         user_id: b.userId, year, month,
         total_duties:   b.weekdayDuties + b.weekendDuties + b.holidayDuties,
