@@ -53,6 +53,26 @@ export default function SettingsPage() {
     router.replace('/login')
   }
 
+  const handleFullReset = async () => {
+    const confirmed = window.confirm(
+      '⚠️ 전체 초기화\n\n모든 당직표, 누적 통계, 제출 데이터가 삭제됩니다.\n프로필(이름/사번)은 유지됩니다.\n\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?'
+    )
+    if (!confirmed) return
+    setLoading('reset-all')
+    try {
+      const res = await fetch('/api/data/reset-all', { method: 'DELETE' })
+      if (res.ok) {
+        show('전체 데이터가 초기화되었습니다', 'success')
+        window.location.reload()
+      } else {
+        const body = await res.json()
+        show(body.error ?? '초기화 실패', 'error')
+      }
+    } finally {
+      setLoading(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white px-6 pt-12 pb-4 border-b border-gray-100">
@@ -116,6 +136,28 @@ export default function SettingsPage() {
               <div className="flex justify-between"><span>이름</span><span className="font-medium">{currentUser.name}</span></div>
               <div className="flex justify-between"><span>사번</span><span className="font-medium">{currentUser.employee_id}</span></div>
               <div className="flex justify-between"><span>권한</span><span className="font-medium">{currentUser.is_admin ? '관리자' : '근무자'}</span></div>
+            </div>
+          </div>
+        )}
+
+        {/* 위험 구역 */}
+        {currentUser?.is_admin && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-red-100">
+            <div className="px-4 py-3 border-b border-red-50">
+              <h2 className="text-sm font-bold text-red-500">위험 구역</h2>
+              <p className="text-xs text-gray-400 mt-0.5">되돌릴 수 없는 작업입니다</p>
+            </div>
+            <div className="px-4 py-4">
+              <p className="text-xs text-gray-500 mb-3">
+                모든 당직표·통계·제출 데이터를 초기화합니다. 프로필 정보는 유지됩니다.
+              </p>
+              <button
+                disabled={loading === 'reset-all'}
+                onClick={handleFullReset}
+                className="w-full py-3 rounded-xl text-sm font-bold text-red-600 bg-red-50 border border-red-200 active:bg-red-100 disabled:opacity-50 transition-colors"
+              >
+                {loading === 'reset-all' ? '초기화 중...' : '전체 데이터 초기화'}
+              </button>
             </div>
           </div>
         )}

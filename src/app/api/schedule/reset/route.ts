@@ -33,5 +33,15 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  const { error: balanceError } = await supabase
+    .from('monthly_balance')
+    .delete()
+    .eq('year', year)
+    .eq('month', month)
+
+  if (balanceError) {
+    return NextResponse.json({ error: balanceError.message }, { status: 500 })
+  }
+
   return NextResponse.json({ success: true, year, month })
 }

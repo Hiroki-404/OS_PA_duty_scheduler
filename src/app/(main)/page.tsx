@@ -16,7 +16,7 @@ type ScheduleWithProfile = {
   is_weekend: boolean
   is_holiday: boolean
   is_locked: boolean
-  profiles: { name: string | null; color: string | null } | null
+  profiles: { name: string | null; color?: string | null } | null
 }
 
 interface Props {
@@ -38,19 +38,19 @@ export default async function HomePage({ searchParams }: Props) {
 
   const [
     { data: rawSchedules },
-    { data: rawProfiles },
+    { data: rawProfilesData, error: profilesError },
     { data: profile },
     { data: availabilities },
     holidays,
   ] = await Promise.all([
-    // FK JOIN: profiles 테이블과 조인하여 name/color 직접 획득
+    // FK JOIN: profiles 테이블과 조인하여 name만 획득 (color는 DB에 없을 수 있으므로 제외)
     supabase.from('schedules')
-      .select('id, user_id, date, is_weekend, is_holiday, is_locked, profiles(name, color)')
+      .select('id, user_id, date, is_weekend, is_holiday, is_locked, profiles(name)')
       .gte('date', monthStart)
       .lte('date', monthEnd)
       .order('date'),
-    // 전체 활성 근무자 목록 (id, name만 먼저 — color는 별도 처리)
-    supabase.from('profiles').select('id, name, color').eq('is_active', true),
+    // 전체 활성 근무자 목록
+    supabase.from('profiles').select('id, name, color').eq('is_active', true).order('created_at'),
     supabase.from('profiles').select('is_admin').eq('id', user!.id).single(),
     supabase.from('availability_requests')
       .select('user_id, date, type')
@@ -58,6 +58,17 @@ export default async function HomePage({ searchParams }: Props) {
       .eq('month', month),
     getHolidaysForMonth(year, month, supabase).catch(() => []),
   ])
+
+  // color 컬럼 없을 때 폴백: name만 조회
+  let rawProfiles: { id: string; name: string | null; color?: string | null }[] | null = rawProfilesData
+  if (!rawProfilesData && profilesError) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('created_at')
+    rawProfiles = data
+  }
 
   const schedules = (rawSchedules as unknown as ScheduleWithProfile[]) ?? []
 
@@ -74,12 +85,12 @@ export default async function HomePage({ searchParams }: Props) {
     }
   })
 
-  // profiles 쿼리 실패하거나 누락된 경우 FK join 데이터로 보완
+  // profiles 쿼리 실패하거나 누락된 경우 FK join 데이터로 보완 (color는 PALETTE 사용)
   schedules.forEach((s, i) => {
     if (s.user_id && !workerMap[s.user_id]) {
       workerMap[s.user_id] = {
         name: s.profiles?.name ?? '미등록',
-        color: s.profiles?.color ?? PALETTE[i % PALETTE.length],
+        color: PALETTE[i % PALETTE.length],
       }
     }
   })

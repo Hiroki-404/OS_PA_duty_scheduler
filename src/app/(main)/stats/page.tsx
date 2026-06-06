@@ -352,6 +352,15 @@ export default function StatsPage() {
     ]).then(([{ data: balances }, { data: profs }]) => {
       setAllBalances(balances ?? [])
       setProfiles(profs ?? [])
+      if (balances && balances.length > 0) {
+        const latest = balances.reduce((prev, cur) => {
+          if (cur.year > prev.year) return cur
+          if (cur.year === prev.year && cur.month > prev.month) return cur
+          return prev
+        })
+        setYear(latest.year)
+        setMonth(latest.month)
+      }
       setLoading(false)
     })
   }, [])

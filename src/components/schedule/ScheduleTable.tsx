@@ -141,11 +141,20 @@ export function ScheduleTable({
               <div className="flex flex-col gap-px mt-auto">
                 {avails.slice(0, 2).map(a => {
                   const st = AVAIL_STYLE[a.type]
-                  const wn = workerMap[a.user_id]?.name ?? '?'
+                  const worker = workerMap[a.user_id]
+                  const wn = worker?.name ?? '?'
+                  const wc = worker?.color ?? '#aaa'
                   return (
-                    <div key={a.user_id} className={`flex items-center gap-0.5 rounded px-0.5 ${st.bg}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} />
-                      <span className={`text-[7px] font-medium truncate ${st.text}`}>
+                    <div
+                      key={a.user_id}
+                      className="flex items-center gap-0.5 rounded px-0.5"
+                      style={{ backgroundColor: wc + '22' }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: wc }}
+                      />
+                      <span className="text-[7px] font-medium truncate" style={{ color: wc }}>
                         {wn.charAt(0)} {st.label}
                       </span>
                     </div>
