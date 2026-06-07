@@ -7,33 +7,35 @@ const PALETTE = ['#4DABF7', '#FF6B6B', '#51CF66', '#FFD43B', '#CC5DE8', '#FF922B
 const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 interface RawBalance {
-  user_id: string
-  year: number
-  month: number
-  total_duties: number
-  weekday_duties: number
-  weekend_duties: number
-  holiday_duties: number
+  user_id: string; year: number; month: number
+  total_duties: number; weekday_duties: number; weekend_duties: number; holiday_duties: number
   dow_0: number; dow_1: number; dow_2: number; dow_3: number
   dow_4: number; dow_5: number; dow_6: number
 }
 interface Profile { id: string; name: string; color: string | null }
+
+// 당해 연도 6월 7일 15:30 기준으로 내년 전체 월 자동 활성화 (전역 마스터 룰)
+function getYearOptions(now: Date): number[] {
+  const activation = new Date(now.getFullYear(), 5, 7, 15, 30)
+  return now >= activation
+    ? [now.getFullYear(), now.getFullYear() + 1]
+    : [now.getFullYear()]
+}
 
 function MonthPickerPopup({ year, month, onSelect }: {
   year: number; month: number
   onSelect: (y: number, m: number) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [pickerYear, setPickerYear] = useState(year)
   const now = new Date()
-  const yearOptions = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2]
-  const isFuture = (y: number, m: number) =>
-    y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth() + 1)
+  const yearOptions = getYearOptions(now)
+  const safeYear = yearOptions.includes(year) ? year : yearOptions[0]
+  const [pickerYear, setPickerYear] = useState(safeYear)
 
   return (
     <>
       <button
-        onClick={() => { setPickerYear(year); setOpen(true) }}
+        onClick={() => { setPickerYear(safeYear); setOpen(true) }}
         className="flex items-center gap-1 bg-gray-100 rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700"
       >
         {year}년 {month}월 <span className="text-gray-400 text-xs">▾</span>
@@ -41,11 +43,9 @@ function MonthPickerPopup({ year, month, onSelect }: {
       <AnimatePresence>
         {open && (
           <>
-            <motion.div
-              className="fixed inset-0 bg-black/30 z-40"
+            <motion.div className="fixed inset-0 bg-black/30 z-40"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setOpen(false)}
-            />
+              onClick={() => setOpen(false)} />
             <motion.div
               className="fixed inset-x-4 top-[15%] bg-white rounded-3xl z-50 shadow-2xl overflow-hidden"
               initial={{ opacity: 0, scale: 0.92, y: -10 }}
@@ -65,16 +65,14 @@ function MonthPickerPopup({ year, month, onSelect }: {
               <div className="grid grid-cols-4 gap-2 p-4">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
                   const isSelected = pickerYear === year && m === month
-                  const isCurrent = pickerYear === now.getFullYear() && m === now.getMonth() + 1
-                  const disabled = isFuture(pickerYear, m)
+                  const isCurrent  = pickerYear === now.getFullYear() && m === now.getMonth() + 1
                   return (
-                    <button key={m} disabled={disabled}
+                    <button key={m}
                       onClick={() => { onSelect(pickerYear, m); setOpen(false) }}
                       className={`h-12 rounded-2xl text-sm font-bold transition-all
                         ${isSelected ? 'bg-toss-blue text-white shadow-sm'
                           : isCurrent ? 'border-2 border-toss-blue text-toss-blue'
-                          : 'text-gray-700 active:bg-gray-100'}
-                        ${disabled ? 'opacity-25 cursor-not-allowed' : ''}`}>
+                          : 'text-gray-700 active:bg-gray-100'}`}>
                       {m}월
                     </button>
                   )
@@ -104,7 +102,6 @@ function MonthlyView({ balances, profiles }: { balances: RawBalance[]; profiles:
   }
 
   const sorted = [...balances].sort((a, b) => b.total_duties - a.total_duties)
-
   return (
     <div className="space-y-3">
       {sorted.map(b => {
@@ -119,7 +116,6 @@ function MonthlyView({ balances, profiles }: { balances: RawBalance[]; profiles:
               <span className="font-bold text-gray-800 flex-1">{worker.name}</span>
               <span className="text-xl font-bold" style={{ color: worker.color }}>{b.total_duties}회</span>
             </div>
-
             <div className="grid grid-cols-3 gap-2 mb-3">
               {[
                 { label: '평일', value: b.weekday_duties, color: '#4DABF7' },
@@ -128,35 +124,22 @@ function MonthlyView({ balances, profiles }: { balances: RawBalance[]; profiles:
               ].map(({ label, value, color }) => (
                 <div key={label} className="bg-white rounded-xl p-2.5 text-center">
                   <div className="text-[10px] text-gray-400 font-medium">{label}</div>
-                  <div className="text-lg font-bold mt-0.5" style={{ color: value > 0 ? color : '#d1d5db' }}>
-                    {value}
-                  </div>
+                  <div className="text-lg font-bold mt-0.5" style={{ color: value > 0 ? color : '#d1d5db' }}>{value}</div>
                 </div>
               ))}
             </div>
-
             <div className="grid grid-cols-7 gap-1">
               {DOW_LABELS.map((d, i) => (
                 <div key={d} className="flex flex-col items-center gap-0.5">
                   <div className="w-full h-8 bg-gray-200 rounded-sm flex items-end overflow-hidden">
                     {dow[i] > 0 && (
-                      <div
-                        className="w-full rounded-sm"
-                        style={{
-                          height: `${(dow[i] / maxDow) * 100}%`,
-                          backgroundColor: worker.color,
-                          minHeight: '4px',
-                        }}
-                      />
+                      <div className="w-full rounded-sm"
+                        style={{ height: `${(dow[i] / maxDow) * 100}%`, backgroundColor: worker.color, minHeight: '4px' }} />
                     )}
                   </div>
                   <span className={`text-[9px] font-bold
-                    ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>
-                    {d}
-                  </span>
-                  <span className="text-[9px] font-bold text-gray-500 min-h-[12px]">
-                    {dow[i] > 0 ? dow[i] : ''}
-                  </span>
+                    ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>{d}</span>
+                  <span className="text-[9px] font-bold text-gray-500 min-h-[12px]">{dow[i] > 0 ? dow[i] : ''}</span>
                 </div>
               ))}
             </div>
@@ -174,20 +157,12 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
   )
 
   const workerStats = useMemo(() => {
-    const map = new Map<string, {
-      id: string; name: string; color: string
-      total: number; weekday: number; weekend: number; holiday: number
-      dow: number[]
-    }>()
+    const map = new Map<string, { id: string; name: string; color: string; total: number; weekday: number; weekend: number; holiday: number; dow: number[] }>()
     for (const b of allBalances) {
       const prof = profileMap[b.user_id]
       if (!prof) continue
-      const cur = map.get(b.user_id) ?? {
-        id: b.user_id, name: prof.name, color: prof.color,
-        total: 0, weekday: 0, weekend: 0, holiday: 0,
-        dow: [0, 0, 0, 0, 0, 0, 0],
-      }
-      cur.total += b.total_duties
+      const cur = map.get(b.user_id) ?? { id: b.user_id, name: prof.name, color: prof.color, total: 0, weekday: 0, weekend: 0, holiday: 0, dow: [0,0,0,0,0,0,0] }
+      cur.total   += b.total_duties
       cur.weekday += b.weekday_duties
       cur.weekend += b.weekend_duties
       cur.holiday += b.holiday_duties
@@ -198,9 +173,7 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
     return [...map.values()].sort((a, b) => b.total - a.total)
   }, [allBalances, profileMap])
 
-  if (workerStats.length === 0) {
-    return <div className="text-center py-12 text-sm text-gray-400">누적 데이터가 없습니다</div>
-  }
+  if (workerStats.length === 0) return <div className="text-center py-12 text-sm text-gray-400">누적 데이터가 없습니다</div>
 
   const totals = workerStats.map(w => w.total)
   const mean = totals.reduce((a, b) => a + b, 0) / totals.length
@@ -210,7 +183,6 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
 
   return (
     <div className="space-y-6">
-      {/* 총 당직 횟수 막대 차트 */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">총 당직 횟수</h3>
         <div className="space-y-3">
@@ -225,19 +197,13 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
                     <span className="text-sm font-medium text-gray-800">{w.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {isAlert && (
-                      <span className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">주의</span>
-                    )}
-                    <span className={`text-sm font-bold ${isAlert ? 'text-red-600' : 'text-gray-700'}`}>
-                      {w.total}회
-                    </span>
+                    {isAlert && <span className="text-xs bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">주의</span>}
+                    <span className={`text-sm font-bold ${isAlert ? 'text-red-600' : 'text-gray-700'}`}>{w.total}회</span>
                   </div>
                 </div>
                 <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${pct}%`, backgroundColor: isAlert ? '#f87171' : w.color }}
-                  />
+                  <div className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${pct}%`, backgroundColor: isAlert ? '#f87171' : w.color }} />
                 </div>
               </div>
             )
@@ -250,7 +216,6 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
         </div>
       </section>
 
-      {/* 주말·공휴일 vs 평일 */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">주말·공휴일 vs 평일</h3>
         <div className="space-y-2">
@@ -275,16 +240,11 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
           })}
         </div>
         <div className="flex gap-4 mt-2 text-xs text-gray-400">
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />주말·공휴일
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-blue-300 inline-block" />평일
-          </span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />주말·공휴일</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-300 inline-block" />평일</span>
         </div>
       </section>
 
-      {/* 요일별 누적 분포 */}
       <section>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">요일별 누적 분포</h3>
         <div className="overflow-x-auto">
@@ -294,9 +254,7 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
                 <th className="text-left py-1.5 pr-3 text-gray-400 font-medium w-16">이름</th>
                 {DOW_LABELS.map((d, i) => (
                   <th key={d} className={`text-center py-1.5 px-1 font-semibold
-                    ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>
-                    {d}
-                  </th>
+                    ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>{d}</th>
                 ))}
                 <th className="text-center py-1.5 px-2 text-gray-600 font-bold">합계</th>
               </tr>
@@ -313,15 +271,9 @@ function CumulativeView({ allBalances, profiles }: { allBalances: RawBalance[]; 
                   {w.dow.map((count, i) => (
                     <td key={i} className="text-center py-1.5 px-1">
                       {count > 0 ? (
-                        <span
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-[10px] font-bold"
-                          style={{ backgroundColor: w.color }}
-                        >
-                          {count}
-                        </span>
-                      ) : (
-                        <span className="text-gray-200">—</span>
-                      )}
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-[10px] font-bold"
+                          style={{ backgroundColor: w.color }}>{count}</span>
+                      ) : <span className="text-gray-200">—</span>}
                     </td>
                   ))}
                   <td className="text-center py-1.5 px-2 font-bold text-gray-800">{w.total}</td>
@@ -376,17 +328,12 @@ export default function StatsPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold text-gray-900 flex-1">당직 통계</h1>
           {mode === 'monthly' && (
-            <MonthPickerPopup
-              year={year} month={month}
-              onSelect={(y, m) => { setYear(y); setMonth(m) }}
-            />
+            <MonthPickerPopup year={year} month={month} onSelect={(y, m) => { setYear(y); setMonth(m) }} />
           )}
           <button
             onClick={() => setMode(m => m === 'monthly' ? 'cumulative' : 'monthly')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap
-              ${mode === 'cumulative'
-                ? 'bg-toss-blue text-white'
-                : 'bg-gray-100 text-gray-600'}`}
+              ${mode === 'cumulative' ? 'bg-toss-blue text-white' : 'bg-gray-100 text-gray-600'}`}
           >
             {mode === 'monthly' ? '누적 통계' : '← 월별'}
           </button>
@@ -409,11 +356,9 @@ export default function StatsPage() {
               transition={{ duration: 0.15 }}
               className="bg-white rounded-2xl p-4 shadow-sm"
             >
-              {mode === 'monthly' ? (
-                <MonthlyView balances={monthlyBalances} profiles={profiles} />
-              ) : (
-                <CumulativeView allBalances={allBalances} profiles={profiles} />
-              )}
+              {mode === 'monthly'
+                ? <MonthlyView balances={monthlyBalances} profiles={profiles} />
+                : <CumulativeView allBalances={allBalances} profiles={profiles} />}
             </motion.div>
           </AnimatePresence>
         )}

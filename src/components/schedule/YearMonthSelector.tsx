@@ -5,26 +5,38 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 interface Props { year: number; month: number }
 
+// 당해 연도 6월 7일 15:30 기준으로 내년 전체 월 자동 활성화
+function getYearOptions(now: Date): number[] {
+  const activation = new Date(now.getFullYear(), 5, 7, 15, 30) // June=5 (0-indexed)
+  return now >= activation
+    ? [now.getFullYear(), now.getFullYear() + 1]
+    : [now.getFullYear()]
+}
+
 export function YearMonthSelector({ year, month }: Props) {
   const router = useRouter()
   const now = new Date()
-  const [open, setOpen] = useState(false)
-  const [pickerYear, setPickerYear] = useState(year)
+  const yearOptions = getYearOptions(now)
 
-  const yearOptions = [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2]
+  // 선택된 연도가 유효한 옵션에 없으면 현재 연도로 fallback
+  const safeYear = yearOptions.includes(year) ? year : yearOptions[0]
+  const [open, setOpen] = useState(false)
+  const [pickerYear, setPickerYear] = useState(safeYear)
+
+  const handleOpen = () => {
+    setPickerYear(safeYear)
+    setOpen(true)
+  }
 
   const handleSelect = (y: number, m: number) => {
     router.push(`?year=${y}&month=${m}`)
     setOpen(false)
   }
 
-  const isFuture = (y: number, m: number) =>
-    y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth() + 2)
-
   return (
     <>
       <button
-        onClick={() => { setPickerYear(year); setOpen(true) }}
+        onClick={handleOpen}
         className="flex items-center gap-1 bg-gray-100 rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700"
       >
         {year}년 {month}월 <span className="text-gray-400 text-xs">▾</span>
@@ -45,7 +57,7 @@ export function YearMonthSelector({ year, month }: Props) {
               exit={{ opacity: 0, scale: 0.92, y: -10 }}
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
             >
-              {/* 연도 탭 */}
+              {/* 연도 탭 — 현재 연도 + (활성화된 경우) 내년 */}
               <div className="flex border-b border-gray-100">
                 {yearOptions.map(y => (
                   <button
@@ -61,24 +73,21 @@ export function YearMonthSelector({ year, month }: Props) {
                 ))}
               </div>
 
-              {/* 1~12월 4×3 그리드 */}
+              {/* 1~12월 그리드 — 모든 월 활성화 (홈 탭은 과거·미래 모두 조회 가능) */}
               <div className="grid grid-cols-4 gap-2 p-4">
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(m => {
                   const isSelected = pickerYear === year && m === month
-                  const isCurrent = pickerYear === now.getFullYear() && m === now.getMonth() + 1
-                  const disabled = isFuture(pickerYear, m)
+                  const isCurrent  = pickerYear === now.getFullYear() && m === now.getMonth() + 1
                   return (
                     <button
                       key={m}
-                      disabled={disabled}
                       onClick={() => handleSelect(pickerYear, m)}
                       className={`h-12 rounded-2xl text-sm font-bold transition-all
                         ${isSelected
                           ? 'bg-toss-blue text-white shadow-sm'
                           : isCurrent
                           ? 'border-2 border-toss-blue text-toss-blue'
-                          : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}
-                        ${disabled ? 'opacity-25 cursor-not-allowed' : ''}`}
+                          : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}`}
                     >
                       {m}월
                     </button>

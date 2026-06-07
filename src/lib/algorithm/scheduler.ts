@@ -17,6 +17,16 @@ export interface PrevMonthBalance {
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
+// Fisher-Yates shuffle — 매 배정 실행마다 무작위 시드 생성
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
 export function generateSchedule(
   year: number,
   month: number,
@@ -30,8 +40,8 @@ export function generateSchedule(
   const assignments = new Map<string, string>()
   const warnings: ScheduleWarning[] = []
 
-  // 해당 월 활성 근무자 필터 (worker_periods 기간 체크)
-  const active = workers.filter(w => {
+  // 해당 월 활성 근무자 필터 후 셔플 — 실행마다 초기 순서 무작위화
+  const filtered = workers.filter(w => {
     if (!w.activePeriod) return true
     const s = new Date(w.activePeriod.startDate)
     const e = w.activePeriod.endDate ? new Date(w.activePeriod.endDate) : null
@@ -39,23 +49,24 @@ export function generateSchedule(
     const monthStart = new Date(year, month - 1, 1)
     return s <= monthEnd && (!e || e >= monthStart)
   })
+  const active = shuffleArray(filtered)
 
   if (!active.length) throw new Error('활성 근무자가 없습니다')
 
-  console.log(`[ALGO] 대상 근무자: ${active.map(w => w.name).join(', ')} (${active.length}명)`)
+  console.log(`[ALGO] 대상 근무자(셔플 후): ${active.map(w => w.name).join(', ')} (${active.length}명)`)
   console.log(`[ALGO] 배정 대상 일수: ${days.length}일`)
 
   const nonInit = prevBalances.filter(b => !b.isInitialMonth)
   const carryover = nonInit.length ? computeCarryover(nonInit, active.length) : {}
   const runningBalance = initRunningBalance(active.map(w => w.id))
 
-  // Most Constrained First: 가용 근무자가 적은 날부터 배정
-  const sortedDays = [...days].sort((a, b) =>
+  // Most Constrained First: 가용 근무자 수 오름차순, 동수 구간은 셔플로 무작위화
+  const shuffledDays = shuffleArray([...days])
+  const sortedDays = shuffledDays.sort((a, b) =>
     getAvailableWorkers(a, active, availabilities).length -
     getAvailableWorkers(b, active, availabilities).length
   )
 
-  // 제약이 심한 날 상위 5개 로그
   const constrainedTop = sortedDays.slice(0, 5).map(d => {
     const iso = d.toISOString().slice(0, 10)
     const avail = getAvailableWorkers(d, active, availabilities).length
@@ -67,21 +78,17 @@ export function generateSchedule(
     const iso = day.toISOString().slice(0, 10)
     const dowLabel = DOW[day.getDay()]
 
-    // 1순위: exclude/annual_leave 없는 근무자
     let candidates = getAvailableWorkers(day, active, availabilities)
     let forced: AvailabilityType | null = null
 
     if (!candidates.length) {
-      // 2순위: 반차 근무자
       const halfDayCandidates = getForcedCandidates(day, active, availabilities, 'half_day')
       if (halfDayCandidates.length) {
         candidates = halfDayCandidates
         forced = 'half_day'
       } else {
-        // 3순위: 연차 → 제외 순 강제 승격
         const annualCandidates = getForcedCandidates(day, active, availabilities, 'annual_leave')
         const excludeCandidates = getForcedCandidates(day, active, availabilities, 'exclude')
-
         if (annualCandidates.length)       { candidates = annualCandidates; forced = 'annual_leave' }
         else if (excludeCandidates.length) { candidates = excludeCandidates; forced = 'exclude' }
         else throw new Error(`${iso}: 배정 가능한 근무자가 없습니다`)
@@ -99,23 +106,24 @@ export function generateSchedule(
       availabilities,
     }
 
-    // 패널티 스코어 계산
-    const scores = candidates.map(w => ({
-      name: w.name,
+    // 패널티 스코어 계산 (1회만)
+    const scored = candidates.map(w => ({
+      worker: w,
       score: computePenalty(w.id, day, ctx),
     }))
-    scores.sort((a, b) => a.score - b.score)
+    scored.sort((a, b) => a.score - b.score)
 
-    const best = candidates.reduce((a, b) =>
-      computePenalty(a.id, day, ctx) <= computePenalty(b.id, day, ctx) ? a : b
-    )
+    // 최저 스코어 동점자 추출 후 무작위 선택 — 핵심 랜덤 시드 주입
+    const minScore = scored[0].score
+    const tied = scored.filter(s => s.score === minScore)
+    const best = tied[Math.floor(Math.random() * tied.length)].worker
 
     assignments.set(iso, best.id)
 
-    // 일별 배정 로그 (패널티 스코어 포함)
-    const scoreStr = scores.map(s => `${s.name}:${s.score.toFixed(0)}`).join(' / ')
+    const scoreStr = scored.map(s => `${s.worker.name}:${s.score.toFixed(0)}`).join(' / ')
     const forcedTag = forced ? ` [강제:${forced}]` : ''
-    console.log(`[ALGO] ${iso}(${dowLabel})${forcedTag} → ${best.name}  [${scoreStr}]`)
+    const tiedTag  = tied.length > 1 ? ` (동점${tied.length}명→랜덤)` : ''
+    console.log(`[ALGO] ${iso}(${dowLabel})${forcedTag}${tiedTag} → ${best.name}  [${scoreStr}]`)
 
     if (forced) {
       warnings.push({
@@ -126,7 +134,6 @@ export function generateSchedule(
       })
     }
 
-    // 누적 밸런스 업데이트
     const b = runningBalance[best.id]
     b.total++
     b.dow[day.getDay()]++
@@ -136,7 +143,6 @@ export function generateSchedule(
     else                            b.weekday++
   }
 
-  // 최종 누적 밸런스 스냅샷
   console.log('[ALGO] ── 최종 누적 밸런스 스냅샷 ──')
   for (const w of active) {
     const b = runningBalance[w.id]
@@ -147,7 +153,6 @@ export function generateSchedule(
   return { assignments, warnings }
 }
 
-// exclude / annual_leave만 제외 (half_day는 배정 가능)
 function getAvailableWorkers(day: Date, workers: WorkerInfo[], avail: AvailabilityMap): WorkerInfo[] {
   const iso = day.toISOString().slice(0, 10)
   return workers.filter(w => {
