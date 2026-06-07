@@ -276,13 +276,15 @@ export default function AvailabilityPage() {
       if (insErr) { console.error('[제출] 삽입 실패:', insErr); setLoading(false); return }
     }
 
-    // 0개 선택 제출: localStorage + DB 플래그 동기화 (타인 화면에서도 제출 완료로 표시)
+    // 0개 선택 제출: localStorage 플래그 + 서버 API(admin client)로 DB 플래그 기록
+    // 클라이언트 사이드 upsert는 RLS silent fail 위험 → API route 경유
     const storageKey = `avail_submitted_${user.id}_${targetYear}_${targetMonth}`
     if (typeof window !== 'undefined') localStorage.setItem(storageKey, 'true')
-    await sb.from('monthly_submission_flags').upsert(
-      { user_id: user.id, year: targetYear, month: targetMonth, submitted_at: nowIso },
-      { onConflict: 'user_id,year,month' }
-    )
+    await fetch('/api/availability/flag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year: targetYear, month: targetMonth, submitted_at: nowIso }),
+    })
 
     const isUpdate = hasSubmitted
     initialRef.current = { ...selections }

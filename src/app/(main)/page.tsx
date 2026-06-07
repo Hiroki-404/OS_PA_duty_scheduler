@@ -9,11 +9,10 @@ import { ResetButton } from '@/components/schedule/ResetButton'
 import { YearMonthSelector } from '@/components/schedule/YearMonthSelector'
 import { DowStatsTable } from '@/components/schedule/DowStatsTable'
 
-// Pantone 기반 16색 퍼스널 컬러 팔레트 — 고채도·고대비·시인성 우선
+// 파스텔 무지개 팔레트 — 설정 탭 피커와 동일한 12색 폴백
 const PALETTE = [
-  '#E63946', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2',
-  '#DC2626', '#0D9488', '#9333EA', '#16A34A', '#EA580C', '#0369A1',
-  '#C2410C', '#15803D', '#6366F1', '#B45309',
+  '#EF9A9A', '#FFCC80', '#FFF176', '#C5E1A5', '#A5D6A7', '#80CBC4',
+  '#80DEEA', '#90CAF9', '#9FA8DA', '#CE93D8', '#F48FB1', '#FFAB76',
 ]
 
 interface Props {

@@ -9,10 +9,20 @@ import { useRouter } from 'next/navigation'
 
 interface ProfileRow { id: string; name: string; employee_id: string; is_admin: boolean; is_active: boolean; color: string | null }
 
+// 파스텔 무지개 팔레트 — 시인성 확보된 12색
 const COLOR_PALETTE = [
-  '#E63946', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2',
-  '#DC2626', '#0D9488', '#9333EA', '#16A34A', '#EA580C', '#0369A1',
-  '#C2410C', '#15803D', '#6366F1', '#B45309',
+  '#EF9A9A', // 파스텔 레드
+  '#FFCC80', // 파스텔 오렌지
+  '#FFF176', // 파스텔 옐로우
+  '#C5E1A5', // 파스텔 라임
+  '#A5D6A7', // 파스텔 그린
+  '#80CBC4', // 파스텔 틸
+  '#80DEEA', // 파스텔 씨안
+  '#90CAF9', // 파스텔 블루
+  '#9FA8DA', // 파스텔 인디고
+  '#CE93D8', // 파스텔 퍼플
+  '#F48FB1', // 파스텔 핑크
+  '#FFAB76', // 파스텔 피치
 ]
 
 export default function SettingsPage() {
