@@ -51,6 +51,12 @@ export type Database = {
         Update: { end_date?: string | null; note?: string | null }
         Relationships: []
       }
+      monthly_submission_flags: {
+        Row: { user_id: string; year: number; month: number; submitted_at: string }
+        Insert: { user_id: string; year: number; month: number; submitted_at?: string }
+        Update: { submitted_at?: string }
+        Relationships: []
+      }
     }
     Views: { [_ in never]: never }
     Functions: { [_ in never]: never }

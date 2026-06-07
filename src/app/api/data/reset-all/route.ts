@@ -10,7 +10,9 @@ export async function DELETE() {
     .from('profiles').select('is_admin').eq('id', user.id).single()
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // exchange_requests 먼저 삭제 (schedules 와 논리적으로 연관)
+  // monthly_submission_flags: PK가 복합키라 별도 삭제
+  await supabase.from('monthly_submission_flags').delete().gte('year', 1)
+
   const tables = ['exchange_requests', 'schedules', 'monthly_balance', 'availability_requests'] as const
   for (const table of tables) {
     const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000')

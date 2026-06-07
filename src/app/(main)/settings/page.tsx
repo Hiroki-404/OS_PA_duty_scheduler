@@ -7,7 +7,13 @@ import { useToast } from '@/components/ui/Toast'
 import { signOut } from '@/lib/kakao/auth'
 import { useRouter } from 'next/navigation'
 
-interface ProfileRow { id: string; name: string; employee_id: string; is_admin: boolean; is_active: boolean }
+interface ProfileRow { id: string; name: string; employee_id: string; is_admin: boolean; is_active: boolean; color: string | null }
+
+const COLOR_PALETTE = [
+  '#E63946', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2',
+  '#DC2626', '#0D9488', '#9333EA', '#16A34A', '#EA580C', '#0369A1',
+  '#C2410C', '#15803D', '#6366F1', '#B45309',
+]
 
 export default function SettingsPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
@@ -46,6 +52,14 @@ export default function SettingsPage() {
     setProfiles(prev => prev.map(p => p.id === targetId ? { ...p, is_active: !currentIsActive } : p))
     show(`${currentIsActive ? '비활성화했습니다' : '활성화했습니다'}`, 'success')
     setLoading(null)
+  }
+
+  const updateColor = async (targetId: string, color: string) => {
+    if (!currentUser?.is_admin) return show('관리자 권한이 없습니다', 'error')
+    const sb = createClient()
+    await sb.from('profiles').update({ color }).eq('id', targetId)
+    setProfiles(prev => prev.map(p => p.id === targetId ? { ...p, color } : p))
+    show('퍼스널 컬러가 변경되었습니다', 'success')
   }
 
   const handleSignOut = async () => {
@@ -92,37 +106,57 @@ export default function SettingsPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: i * 0.04 }}
-                className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0"
+                className="px-4 py-3 border-b border-gray-50 last:border-0"
               >
-                <div className="w-9 h-9 rounded-full bg-toss-blue text-white flex items-center justify-center font-bold text-sm">
-                  {p.name[0]}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-800">{p.name}</span>
-                    {p.is_admin && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">관리자</span>}
-                    {!p.is_active && <span className="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">비활성</span>}
+                <div className="flex items-center gap-3">
+                  <div
+                    style={{ backgroundColor: p.color ?? COLOR_PALETTE[i % COLOR_PALETTE.length] }}
+                    className="w-9 h-9 rounded-full text-white flex items-center justify-center font-bold text-sm shrink-0"
+                  >
+                    {p.name[0]}
                   </div>
-                  <span className="text-xs text-gray-400">{p.employee_id}</span>
-                </div>
-                {p.id !== currentUser?.id && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => toggleAdmin(p.id, p.is_admin)}
-                      disabled={loading === p.id}
-                      className="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
-                    >
-                      {loading === p.id ? '⏳' : p.is_admin ? '관리자 해제' : '관리자 위임'}
-                    </button>
-                    <button
-                      onClick={() => toggleActive(p.id, p.is_active)}
-                      disabled={loading === p.id + '-active'}
-                      className="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
-                    >
-                      {loading === p.id + '-active' ? '⏳' : p.is_active ? '비활성화' : '활성화'}
-                    </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-800">{p.name}</span>
+                      {p.is_admin && <span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">관리자</span>}
+                      {!p.is_active && <span className="text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">비활성</span>}
+                    </div>
+                    <span className="text-xs text-gray-400">{p.employee_id}</span>
                   </div>
-                )}
+                  {p.id !== currentUser?.id && (
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleAdmin(p.id, p.is_admin)}
+                        disabled={loading === p.id}
+                        className="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                      >
+                        {loading === p.id ? '⏳' : p.is_admin ? '관리자 해제' : '관리자 위임'}
+                      </button>
+                      <button
+                        onClick={() => toggleActive(p.id, p.is_active)}
+                        disabled={loading === p.id + '-active'}
+                        className="text-xs px-2 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                      >
+                        {loading === p.id + '-active' ? '⏳' : p.is_active ? '비활성화' : '활성화'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {/* 퍼스널 컬러 피커 — 관리자만 접근 */}
+                <div className="flex flex-wrap gap-1.5 mt-2 ml-12">
+                  {COLOR_PALETTE.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => updateColor(p.id, c)}
+                      style={{ backgroundColor: c }}
+                      className={`w-5 h-5 rounded-full transition-all ${
+                        p.color === c
+                          ? 'ring-2 ring-offset-1 ring-gray-500 scale-125'
+                          : 'opacity-50 hover:opacity-100 hover:scale-110'
+                      }`}
+                    />
+                  ))}
+                </div>
               </motion.div>
             ))}
           </div>

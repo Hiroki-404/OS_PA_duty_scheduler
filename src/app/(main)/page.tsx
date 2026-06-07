@@ -9,7 +9,12 @@ import { ResetButton } from '@/components/schedule/ResetButton'
 import { YearMonthSelector } from '@/components/schedule/YearMonthSelector'
 import { DowStatsTable } from '@/components/schedule/DowStatsTable'
 
-const PALETTE = ['#4DABF7', '#FF6B6B', '#51CF66', '#FFD43B', '#CC5DE8', '#FF922B', '#20C997']
+// Pantone 기반 16색 퍼스널 컬러 팔레트 — 고채도·고대비·시인성 우선
+const PALETTE = [
+  '#E63946', '#2563EB', '#059669', '#D97706', '#7C3AED', '#0891B2',
+  '#DC2626', '#0D9488', '#9333EA', '#16A34A', '#EA580C', '#0369A1',
+  '#C2410C', '#15803D', '#6366F1', '#B45309',
+]
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>
@@ -46,8 +51,8 @@ export default async function HomePage({ searchParams }: Props) {
       .gte('date', monthStart)
       .lte('date', monthEnd)
       .order('date'),
-    // color 컬럼 없는 환경 대비: name만 조회 후 PALETTE로 색상 할당
-    db.from('profiles').select('id, name').eq('is_active', true).order('created_at'),
+    // profiles.color 우선 사용, 미설정 시 PALETTE 인덱스 폴백
+    db.from('profiles').select('id, name, color').eq('is_active', true).order('created_at'),
     supabase.from('profiles').select('is_admin').eq('id', user!.id).single(),
     db.from('availability_requests')
       .select('user_id, date, type')
@@ -62,9 +67,10 @@ export default async function HomePage({ searchParams }: Props) {
   // workerMap: adminClient로 가져온 전체 활성 근무자 기반 구성
   const workerMap: Record<string, { name: string; color: string }> = {}
   ;(rawProfilesData ?? []).forEach((p, i) => {
+    const profile = p as { id: string; name: string | null; color: string | null }
     workerMap[p.id] = {
-      name: (p as { id: string; name: string | null }).name ?? '미등록',
-      color: PALETTE[i % PALETTE.length],
+      name: profile.name ?? '미등록',
+      color: profile.color ?? PALETTE[i % PALETTE.length],
     }
   })
 

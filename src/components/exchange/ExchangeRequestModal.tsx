@@ -211,11 +211,11 @@ export function ExchangeRequestModal({
                   )}
 
                   <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => { setTargetDate(''); setStep(1) }}>
+                    <Button variant="ghost" className="flex-1" onClick={() => { setTargetDate(''); setStep(1) }}>
                       ← 이전
                     </Button>
                     <Button
-                      fullWidth
+                      className="flex-1"
                       disabled={!targetDate || !targetAssignee}
                       onClick={() => setStep(4)}
                     >
@@ -243,8 +243,8 @@ export function ExchangeRequestModal({
                     </motion.button>
                   ))}
                   <div className="flex gap-2 mt-4">
-                    <Button variant="ghost" onClick={() => setStep(1)}>← 이전</Button>
-                    <Button fullWidth loading={loading} disabled={!targetId} onClick={handleSubmit}>
+                    <Button variant="ghost" className="flex-1" onClick={() => setStep(1)}>← 이전</Button>
+                    <Button className="flex-1" loading={loading} disabled={!targetId} onClick={handleSubmit}>
                       신청하기
                     </Button>
                   </div>
@@ -275,8 +275,8 @@ export function ExchangeRequestModal({
                     신청 후 상대방이 수락해야 교환이 확정됩니다
                   </p>
                   <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => setStep(2)}>← 이전</Button>
-                    <Button fullWidth loading={loading} onClick={handleSubmit}>
+                    <Button variant="ghost" className="flex-1" onClick={() => setStep(2)}>← 이전</Button>
+                    <Button className="flex-1" loading={loading} onClick={handleSubmit}>
                       신청하기
                     </Button>
                   </div>

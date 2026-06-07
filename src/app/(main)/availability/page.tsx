@@ -152,6 +152,7 @@ export default function AvailabilityPage() {
         holidaysData,
         { data: profiles },
         { data: allSubs },
+        { data: submissionFlags },
       ] = await Promise.all([
         sb.from('availability_requests')
           .select('date,type,submitted_at')
@@ -174,6 +175,11 @@ export default function AvailabilityPage() {
           .eq('month', targetMonth)
           .not('submitted_at', 'is', null)
           .order('submitted_at', { ascending: true }),
+        // 0개 제출자 감지: availability_requests 행 없어도 제출 완료 판별
+        sb.from('monthly_submission_flags')
+          .select('user_id,submitted_at')
+          .eq('year', targetYear)
+          .eq('month', targetMonth),
       ])
 
       const sel: Record<string, AvailabilityType> = {}
@@ -208,6 +214,12 @@ export default function AvailabilityPage() {
         if (!datesByUser[s.user_id]) datesByUser[s.user_id] = []
         datesByUser[s.user_id].push(s.date)
         submittedAtByUser[s.user_id] = s.submitted_at
+      })
+      // 0개 제출자: availability_requests 행이 없어도 flags 테이블로 제출 완료 감지
+      ;(submissionFlags ?? []).forEach((f: any) => {
+        if (!submittedAtByUser[f.user_id]) {
+          submittedAtByUser[f.user_id] = f.submitted_at
+        }
       })
 
       const workerList = (profiles ?? []).map((p: any) => ({
@@ -264,9 +276,13 @@ export default function AvailabilityPage() {
       if (insErr) { console.error('[제출] 삽입 실패:', insErr); setLoading(false); return }
     }
 
-    // 0개 선택 제출: localStorage 플래그로 제출 완료 상태 영구 기억
+    // 0개 선택 제출: localStorage + DB 플래그 동기화 (타인 화면에서도 제출 완료로 표시)
     const storageKey = `avail_submitted_${user.id}_${targetYear}_${targetMonth}`
     if (typeof window !== 'undefined') localStorage.setItem(storageKey, 'true')
+    await sb.from('monthly_submission_flags').upsert(
+      { user_id: user.id, year: targetYear, month: targetMonth, submitted_at: nowIso },
+      { onConflict: 'user_id,year,month' }
+    )
 
     const isUpdate = hasSubmitted
     initialRef.current = { ...selections }

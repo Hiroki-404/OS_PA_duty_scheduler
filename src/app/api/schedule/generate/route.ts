@@ -176,9 +176,10 @@ export async function POST(request: NextRequest) {
     }
     console.log(`[SCHEDULE] schedules INSERT 완료: ${rows.length}건`)
 
-    // 8. monthly_balance 저장
+    // 8. monthly_balance 저장 — 재배치 시 기존 행 완전 삭제 후 재삽입 (stale 데이터 방지)
     const balances = computeMonthlyBalance(year, month, result.assignments, workers, holidays)
-    const { error: balanceError } = await db.from('monthly_balance').upsert(
+    await db.from('monthly_balance').delete().eq('year', year).eq('month', month)
+    const { error: balanceError } = await db.from('monthly_balance').insert(
       balances.map(b => ({
         user_id: b.userId, year, month,
         total_duties:   b.weekdayDuties + b.weekendDuties + b.holidayDuties,
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
         is_initial_month: prevData.length === 0,
       }))
     )
-    if (balanceError) console.error('[SCHEDULE] monthly_balance upsert 오류:', balanceError.message)
+    if (balanceError) console.error('[SCHEDULE] monthly_balance insert 오류:', balanceError.message)
 
     console.log(`${'='.repeat(60)}`)
     console.log(`[SCHEDULE] 완료: ${rows.length}일 배정, 근무자 ${workers.length}명`)
