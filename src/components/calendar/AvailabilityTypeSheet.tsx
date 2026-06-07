@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { AvailabilityType } from '@/lib/algorithm/types'
 
 const OPTIONS: Array<{ type: AvailabilityType; label: string; desc: string; colorClass: string }> = [
-  { type: 'exclude',      label: '당직 제외', desc: '이 날 당직에서 완전 제외됩니다',         colorClass: 'bg-red-50 text-red-600' },
-  { type: 'half_day',     label: '반차',     desc: '반차 — 당직 배정에 포함될 수 있습니다',  colorClass: 'bg-orange-50 text-orange-600' },
-  { type: 'annual_leave', label: '연차',     desc: '연차 (당직 배정에서 제외)',              colorClass: 'bg-purple-50 text-purple-600' },
+  { type: 'exclude',      label: '당직 제외', desc: '이 날 당직에서 제외됩니다',         colorClass: 'bg-red-50 text-red-600' },
+  { type: 'half_day',     label: '반차',     desc: '당직 배정에 포함될 수 있습니다',     colorClass: 'bg-orange-50 text-orange-600' },
+  { type: 'annual_leave', label: '연차',     desc: '이 날 당직에서 제외됩니다',         colorClass: 'bg-purple-50 text-purple-600' },
 ]
 
 interface Props {

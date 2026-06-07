@@ -21,8 +21,8 @@ export default function LoginPage() {
       >
         <div className="text-center space-y-3">
           <div className="text-5xl">🏥</div>
-          <h1 className="text-2xl font-bold text-gray-900">당직 관리</h1>
-          <p className="text-gray-400 text-sm">병원 스마트 당직 배정 플랫폼</p>
+          <h1 className="text-2xl font-bold text-gray-900">고대안산병원OS</h1>
+          <p className="text-gray-400 text-sm">PA 당직 관리 시스템</p>
         </div>
 
         <motion.button

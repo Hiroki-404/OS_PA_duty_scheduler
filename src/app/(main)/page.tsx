@@ -86,11 +86,7 @@ export default async function HomePage({ searchParams }: Props) {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white px-6 pt-12 pb-4 sticky top-0 z-10 border-b border-gray-100">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900">{year}년 {month}월 당직표</h1>
-            <p className="text-sm text-gray-400 mt-0.5">이번 달 당직 일정</p>
-          </div>
+        <div className="flex items-center justify-end gap-2">
           <div className="flex items-center gap-2 shrink-0">
             <YearMonthSelector year={year} month={month} />
             {profile?.is_admin && (

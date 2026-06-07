@@ -2,13 +2,44 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { CalendarDays, CheckCircle2, ArrowLeftRight, BarChart3, Settings2 } from 'lucide-react'
 
 const tabs = [
-  { href: '/', label: '홈', icon: '🏠' },
-  { href: '/availability', label: '제출', icon: '📅' },
-  { href: '/exchange', label: '교환', icon: '🔄' },
-  { href: '/stats', label: '통계', icon: '📊' },
-  { href: '/settings', label: '설정', icon: '⚙️' },
+  {
+    href: '/',
+    label: '당직표',
+    Icon: CalendarDays,
+    activeColor: 'text-blue-500',
+    activeBg: 'bg-blue-50',
+  },
+  {
+    href: '/availability',
+    label: '제외일',
+    Icon: CheckCircle2,
+    activeColor: 'text-emerald-500',
+    activeBg: 'bg-emerald-50',
+  },
+  {
+    href: '/exchange',
+    label: '교환',
+    Icon: ArrowLeftRight,
+    activeColor: 'text-blue-500',
+    activeBg: 'bg-blue-50',
+  },
+  {
+    href: '/stats',
+    label: '통계',
+    Icon: BarChart3,
+    activeColor: 'text-violet-500',
+    activeBg: 'bg-violet-50',
+  },
+  {
+    href: '/settings',
+    label: '설정',
+    Icon: Settings2,
+    activeColor: 'text-gray-500',
+    activeBg: 'bg-gray-100',
+  },
 ]
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +47,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex flex-col min-h-screen max-w-md mx-auto bg-white relative">
       <main className="flex-1 overflow-y-auto pb-20">
-        {/* mode="wait" 제거: 탭 전환 시 이전 페이지 exit 완료 대기 없이 즉시 새 페이지 진입 */}
         <motion.div
           key={pathname}
           initial={{ opacity: 0 }}
@@ -31,8 +61,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           const active = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href)
           return (
             <Link key={tab.href} href={tab.href} className="flex-1 flex flex-col items-center py-2 gap-0.5">
-              <span className="text-lg">{tab.icon}</span>
-              <span className={`text-[10px] font-medium ${active ? 'text-toss-blue' : 'text-gray-400'}`}>
+              <span className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all
+                ${active ? `${tab.activeBg}` : ''}`}>
+                <tab.Icon
+                  size={20}
+                  strokeWidth={active ? 2.2 : 1.8}
+                  className={`transition-colors ${active ? tab.activeColor : 'text-gray-400'}`}
+                />
+              </span>
+              <span className={`text-[10px] font-medium transition-colors ${active ? tab.activeColor : 'text-gray-400'}`}>
                 {tab.label}
               </span>
             </Link>

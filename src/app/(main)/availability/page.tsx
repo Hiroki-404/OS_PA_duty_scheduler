@@ -293,8 +293,8 @@ export default function AvailabilityPage() {
       <header className="bg-white px-6 pt-12 pb-4 border-b border-gray-100">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">제외일 입력</h1>
-            <p className="text-sm text-gray-400 mt-0.5">당직을 쉬고 싶은 날을 선택하세요</p>
+            <h1 className="text-xl font-bold text-gray-900">제외일 선택</h1>
+            <p className="text-sm text-gray-400 mt-0.5">당직 제외일을 선택 후 제출하세요</p>
           </div>
           <MonthPickerPopup
             year={targetYear}
@@ -342,39 +342,47 @@ export default function AvailabilityPage() {
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <h2 className="text-sm font-bold text-gray-700 mb-3">팀 제출 현황</h2>
             <div className="space-y-3">
-              {workers.map((w, i) => (
-                <motion.div
-                  key={w.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className={`p-4 rounded-2xl transition-all
-                    ${w.submittedAt ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50 opacity-50 blur-[1px]'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0
-                      ${w.submittedAt ? 'bg-toss-blue text-white' : 'bg-gray-200 text-gray-500'}`}>
-                      {w.name[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-gray-800">
-                        {w.name}{w.id === currentUserId && ' (나)'}
+              {workers.map((w, i) => {
+                // 본인이 0개 제출한 경우 DB 행이 없어도 hasSubmitted(localStorage) 로 판단
+                const isMe = w.id === currentUserId
+                const isSubmitted = isMe ? hasSubmitted : !!w.submittedAt
+                return (
+                  <motion.div
+                    key={w.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className={`p-4 rounded-2xl transition-all
+                      ${isSubmitted ? 'bg-blue-50 border border-blue-100' : 'bg-gray-50 opacity-50 blur-[1px]'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0
+                        ${isSubmitted ? 'bg-toss-blue text-white' : 'bg-gray-200 text-gray-500'}`}>
+                        {w.name[0]}
                       </div>
-                      {w.submittedAt
-                        ? <div className="text-xs text-green-600 mt-0.5">제출 완료</div>
-                        : <div className="text-xs text-gray-400 mt-0.5">미제출</div>}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-gray-800">
+                          {w.name}{isMe && ' (나)'}
+                        </div>
+                        {isSubmitted
+                          ? <div className="text-xs text-green-600 mt-0.5">제출 완료</div>
+                          : <div className="text-xs text-gray-400 mt-0.5">미제출</div>}
+                      </div>
+                      {isSubmitted && <span className="text-toss-blue text-xl shrink-0">✓</span>}
                     </div>
-                    {w.submittedAt && <span className="text-toss-blue text-xl shrink-0">✓</span>}
-                  </div>
-                  {w.submittedAt && w.dates && w.dates.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {w.dates.map(iso => (
-                        <DateChip key={iso} iso={iso} holidays={holidaySet} />
-                      ))}
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+                    {isSubmitted && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {w.dates && w.dates.length > 0
+                          ? w.dates.map(iso => (
+                              <DateChip key={iso} iso={iso} holidays={holidaySet} />
+                            ))
+                          : <span className="text-xs text-gray-400">제외일 없음</span>
+                        }
+                      </div>
+                    )}
+                  </motion.div>
+                )
+              })}
             </div>
           </div>
         )}
