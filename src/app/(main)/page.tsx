@@ -11,23 +11,15 @@ import { DowStatsTable } from '@/components/schedule/DowStatsTable'
 
 const PALETTE = ['#4DABF7', '#FF6B6B', '#51CF66', '#FFD43B', '#CC5DE8', '#FF922B', '#20C997']
 
-type ScheduleWithProfile = {
-  id: string
-  user_id: string
-  date: string
-  is_weekend: boolean
-  is_holiday: boolean
-  is_locked: boolean
-  profiles: { name: string | null; color?: string | null } | null
-}
-
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>
 }
 
 export default async function HomePage({ searchParams }: Props) {
   const supabase = await createClient()
-  const adminSupabase = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : null
+  // RLS 완전 우회: 모든 데이터 조회에 admin client 사용
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase
+
   const { data: { user } } = await supabase.auth.getUser()
 
   const now = new Date()
@@ -42,78 +34,52 @@ export default async function HomePage({ searchParams }: Props) {
 
   const [
     { data: rawSchedules },
-    { data: rawProfilesData, error: profilesError },
+    { data: rawProfilesData },
     { data: profile },
     { data: availabilities },
     holidays,
     { data: rawExchanges },
   ] = await Promise.all([
-    // FK JOIN: profiles 테이블과 조인하여 name만 획득 (color는 DB에 없을 수 있으므로 제외)
-    supabase.from('schedules')
-      .select('id, user_id, date, is_weekend, is_holiday, is_locked, profiles(name)')
+    // FK 조인 제거: profiles 는 별도 쿼리로 충분
+    db.from('schedules')
+      .select('id, user_id, date, is_weekend, is_holiday, is_locked')
       .gte('date', monthStart)
       .lte('date', monthEnd)
       .order('date'),
-    // 전체 활성 근무자 목록 (admin client로 RLS 우회, 없으면 일반 client 폴백)
-    (adminSupabase ?? supabase).from('profiles').select('id, name, color').eq('is_active', true).order('created_at'),
+    // color 컬럼 없는 환경 대비: name만 조회 후 PALETTE로 색상 할당
+    db.from('profiles').select('id, name').eq('is_active', true).order('created_at'),
     supabase.from('profiles').select('is_admin').eq('id', user!.id).single(),
-    supabase.from('availability_requests')
+    db.from('availability_requests')
       .select('user_id, date, type')
       .eq('year', year)
       .eq('month', month),
-    getHolidaysForMonth(year, month, supabase).catch(() => []),
-    // 확정된 교환 요청 (캘린더 바인딩용)
-    (adminSupabase ?? supabase)
-      .from('exchange_requests')
+    getHolidaysForMonth(year, month, db).catch(() => [] as { date: string; name: string }[]),
+    db.from('exchange_requests')
       .select('id, requester_id, target_id, requester_date, target_date, type')
       .eq('status', 'accepted'),
   ])
 
-  // color 컬럼 없을 때 폴백: name만 조회
-  let rawProfiles: { id: string; name: string | null; color?: string | null }[] | null = rawProfilesData
-  if (!rawProfilesData && profilesError) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('created_at')
-    rawProfiles = data
-  }
+  // workerMap: adminClient로 가져온 전체 활성 근무자 기반 구성
+  const workerMap: Record<string, { name: string; color: string }> = {}
+  ;(rawProfilesData ?? []).forEach((p, i) => {
+    workerMap[p.id] = {
+      name: (p as { id: string; name: string | null }).name ?? '미등록',
+      color: PALETTE[i % PALETTE.length],
+    }
+  })
 
-  const schedules = (rawSchedules as unknown as ScheduleWithProfile[]) ?? []
+  const scheduleList = (rawSchedules ?? []) as Array<{
+    id: string; user_id: string; date: string
+    is_weekend: boolean; is_holiday: boolean; is_locked: boolean
+  }>
 
-  // 이번 달 확정 교환만 필터링
+  // 이번 달에 걸치는 확정 교환만 필터링
   const exchanges = (rawExchanges ?? []).filter(ex => {
     const rd = ex.requester_date as string
     const td = ex.target_date as string | null
-    return (rd >= monthStart && rd <= monthEnd) || (td != null && td >= monthStart && td <= monthEnd)
+    return (rd >= monthStart && rd <= monthEnd) ||
+           (td != null && td >= monthStart && td <= monthEnd)
   })
-
-  // workerMap 구축 (이중 보완 전략)
-  // 1순위: profiles 쿼리 결과 (모든 활성 근무자 포함)
-  // 2순위: schedules FK join 결과 (profiles 쿼리 실패 시 보완)
-  const workerMap: Record<string, { name: string; color: string }> = {}
-
-  ;(rawProfiles ?? []).forEach((p, i) => {
-    const color = (p as { id: string; name: string | null; color?: string | null }).color
-    workerMap[p.id] = {
-      name: p.name ?? '미등록',
-      color: color ?? PALETTE[i % PALETTE.length],
-    }
-  })
-
-  // profiles 쿼리 실패하거나 누락된 경우 FK join 데이터로 보완 (color는 PALETTE 사용)
-  schedules.forEach((s, i) => {
-    if (s.user_id && !workerMap[s.user_id]) {
-      workerMap[s.user_id] = {
-        name: s.profiles?.name ?? '미등록',
-        color: PALETTE[i % PALETTE.length],
-      }
-    }
-  })
-
-  // ScheduleTable용: profiles 중첩 필드 제거한 순수 schedule 배열
-  const scheduleList = schedules.map(({ profiles: _p, ...rest }) => rest)
 
   const hasSchedules = scheduleList.length > 0
 

@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 
 const tabs = [
   { href: '/', label: '홈', icon: '🏠' },
@@ -16,17 +16,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex flex-col min-h-screen max-w-md mx-auto bg-white relative">
       <main className="flex-1 overflow-y-auto pb-20">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
+        {/* mode="wait" 제거: 탭 전환 시 이전 페이지 exit 완료 대기 없이 즉시 새 페이지 진입 */}
+        <motion.div
+          key={pathname}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.1 }}
+        >
+          {children}
+        </motion.div>
       </main>
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex z-20">
         {tabs.map(tab => {

@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 상대방에게 알림
   const { data: requesterProfile } = await supabase.from('profiles').select('name').eq('id', user.id).single()
   await supabase.from('notifications').insert({
     user_id: targetId,
@@ -77,7 +76,6 @@ export async function PATCH(request: NextRequest) {
   const newStatus = action === 'accept' ? 'accepted' : 'rejected'
 
   if (action === 'accept') {
-    // 맞교환: 두 날짜 user_id swap
     if (ex.type === 'swap' && ex.target_date) {
       const { data: reqSchedule } = await supabase.from('schedules').select('id,user_id').eq('date', ex.requester_date).single()
       const { data: tgtSchedule } = await supabase.from('schedules').select('id,user_id').eq('date', ex.target_date).single()
@@ -88,7 +86,6 @@ export async function PATCH(request: NextRequest) {
         ])
       }
     }
-    // 일방 교체: requester_date의 user_id → target_id
     if (ex.type === 'transfer') {
       await supabase.from('schedules').update({ user_id: ex.target_id }).eq('date', ex.requester_date)
     }
@@ -96,7 +93,6 @@ export async function PATCH(request: NextRequest) {
 
   await supabase.from('exchange_requests').update({ status: newStatus, responded_at: new Date().toISOString() }).eq('id', exchangeId)
 
-  // 신청자에게 응답 알림
   await supabase.from('notifications').insert({
     user_id: ex.requester_id,
     type: 'exchange_response',
@@ -104,4 +100,30 @@ export async function PATCH(request: NextRequest) {
   })
 
   return NextResponse.json({ status: newStatus })
+}
+
+// 신청자 본인이 pending 상태 요청을 취소
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(request.url)
+  const exchangeId = searchParams.get('id')
+  if (!exchangeId) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+  const { data: ex, error: fetchErr } = await supabase
+    .from('exchange_requests').select('requester_id, status').eq('id', exchangeId).single()
+
+  if (fetchErr || !ex) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (ex.requester_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (ex.status !== 'pending') return NextResponse.json({ error: '대기 중인 요청만 취소할 수 있습니다' }, { status: 409 })
+
+  const { error } = await supabase
+    .from('exchange_requests')
+    .update({ status: 'cancelled' })
+    .eq('id', exchangeId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }
