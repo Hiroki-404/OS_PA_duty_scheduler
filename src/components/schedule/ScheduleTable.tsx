@@ -169,7 +169,7 @@ export function ScheduleTable({
                 <div className="text-[7px] text-red-500 font-semibold leading-none truncate">
                   {exInfo.type === 'swap'
                     ? `↔${workerMap[exInfo.partnerId]?.name ?? '?'}(${exInfo.partnerDate?.slice(-2)}일)`
-                    : `→${workerMap[exInfo.partnerId]?.name ?? '?'}`}
+                    : `→${workerMap[exInfo.partnerId]?.name ?? '?'}(일방)`}
                 </div>
               )}
 
@@ -248,11 +248,13 @@ export function ScheduleTable({
                       {/* 교환 기록 서브라인 */}
                       {sheetExchange && (
                         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100">
-                          <span className="text-red-400 text-xs shrink-0">🔄</span>
+                          <span className="text-red-400 text-xs shrink-0">
+                            {sheetExchange.type === 'swap' ? '↔' : '→'}
+                          </span>
                           <span className="text-xs text-red-600 font-medium">
                             {sheetExchange.type === 'swap'
-                              ? `${workerMap[sheetExchange.partnerId]?.name ?? '?'}와 맞교환 (원 날짜: ${sheetExchange.partnerDate?.slice(-2)}일)`
-                              : `${workerMap[sheetExchange.partnerId]?.name ?? '?'}에게 일방 교체됨`}
+                              ? `교환자: ${workerMap[sheetExchange.partnerId]?.name ?? '?'}(${sheetExchange.partnerDate?.slice(-2)}일)`
+                              : `교체자: ${workerMap[sheetExchange.partnerId]?.name ?? '?'}`}
                           </span>
                         </div>
                       )}

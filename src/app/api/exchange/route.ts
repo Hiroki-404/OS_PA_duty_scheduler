@@ -2,8 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+type AnySupabaseClient = ReturnType<typeof createAdminClient>
+
 // 교환 수락 후 영향받은 월의 monthly_balance 재계산
-async function recalculateBalance(db: ReturnType<typeof createAdminClient>, year: number, month: number) {
+async function recalculateBalance(db: AnySupabaseClient, year: number, month: number) {
   const pad = (n: number) => String(n).padStart(2, '0')
   const monthStart = `${year}-${pad(month)}-01`
   const lastDay = new Date(year, month, 0).getDate()
@@ -132,7 +134,7 @@ export async function PATCH(request: NextRequest) {
       ])
       for (const ym of months) {
         const [y, m] = ym.split('-').map(Number)
-        await recalculateBalance(db as ReturnType<typeof createAdminClient>, y, m)
+        await recalculateBalance(db as AnySupabaseClient, y, m)
       }
     }
     if (ex.type === 'transfer') {

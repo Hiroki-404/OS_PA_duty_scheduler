@@ -194,6 +194,27 @@ export default function ExchangePage() {
     }
   }
 
+  // 교환 상태 실시간 동기화 — 수락/거절 시 양쪽 화면 즉시 갱신
+  useEffect(() => {
+    if (!currentUserId) return
+    const sb = createClient()
+    const channel = sb.channel(`exchange-sync-${currentUserId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'exchange_requests' },
+        (payload) => {
+          const updated = payload.new as any
+          if (updated.requester_id === currentUserId || updated.target_id === currentUserId) {
+            setRequests(prev =>
+              prev.map(r => r.id === updated.id ? { ...r, ...updated } : r)
+            )
+          }
+        }
+      )
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
+  }, [currentUserId])
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white px-6 pt-12 pb-4 border-b border-gray-100">
