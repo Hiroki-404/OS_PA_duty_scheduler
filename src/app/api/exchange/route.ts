@@ -1,5 +1,43 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
+
+// 교환 수락 후 영향받은 월의 monthly_balance 재계산
+async function recalculateBalance(db: ReturnType<typeof createAdminClient>, year: number, month: number) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const monthStart = `${year}-${pad(month)}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const monthEnd = `${year}-${pad(month)}-${pad(lastDay)}`
+
+  const { data: schedules } = await db.from('schedules')
+    .select('user_id, date, is_weekend, is_holiday')
+    .gte('date', monthStart)
+    .lte('date', monthEnd)
+
+  if (!schedules || schedules.length === 0) return
+
+  const map: Record<string, { total: number; weekday: number; weekend: number; holiday: number; dow: number[] }> = {}
+  for (const s of schedules) {
+    if (!map[s.user_id]) map[s.user_id] = { total: 0, weekday: 0, weekend: 0, holiday: 0, dow: [0,0,0,0,0,0,0] }
+    const b = map[s.user_id]
+    b.total++
+    if (s.is_holiday) b.holiday++
+    else if (s.is_weekend) b.weekend++
+    else b.weekday++
+    b.dow[new Date(s.date + 'T00:00:00').getDay()]++
+  }
+
+  const inserts = Object.entries(map).map(([uid, b]) => ({
+    user_id: uid, year, month,
+    total_duties: b.total, weekday_duties: b.weekday, weekend_duties: b.weekend, holiday_duties: b.holiday,
+    dow_0: b.dow[0], dow_1: b.dow[1], dow_2: b.dow[2], dow_3: b.dow[3],
+    dow_4: b.dow[4], dow_5: b.dow[5], dow_6: b.dow[6],
+    is_initial_month: false,
+  }))
+
+  await db.from('monthly_balance').delete().eq('year', year).eq('month', month)
+  if (inserts.length > 0) await db.from('monthly_balance').insert(inserts)
+}
 
 export async function GET() {
   const supabase = await createClient()
@@ -66,7 +104,9 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid params' }, { status: 400 })
   }
 
-  const { data: ex, error: fetchErr } = await supabase
+  const db = process.env.SUPABASE_SERVICE_ROLE_KEY ? createAdminClient() : supabase
+
+  const { data: ex, error: fetchErr } = await db
     .from('exchange_requests').select('*').eq('id', exchangeId).single()
 
   if (fetchErr || !ex) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -77,21 +117,32 @@ export async function PATCH(request: NextRequest) {
 
   if (action === 'accept') {
     if (ex.type === 'swap' && ex.target_date) {
-      const { data: reqSchedule } = await supabase.from('schedules').select('id,user_id').eq('date', ex.requester_date).single()
-      const { data: tgtSchedule } = await supabase.from('schedules').select('id,user_id').eq('date', ex.target_date).single()
+      const { data: reqSchedule } = await db.from('schedules').select('id,user_id').eq('date', ex.requester_date).single()
+      const { data: tgtSchedule } = await db.from('schedules').select('id,user_id').eq('date', ex.target_date).single()
       if (reqSchedule && tgtSchedule) {
         await Promise.all([
-          supabase.from('schedules').update({ user_id: tgtSchedule.user_id }).eq('id', reqSchedule.id),
-          supabase.from('schedules').update({ user_id: reqSchedule.user_id }).eq('id', tgtSchedule.id),
+          db.from('schedules').update({ user_id: tgtSchedule.user_id }).eq('id', reqSchedule.id),
+          db.from('schedules').update({ user_id: reqSchedule.user_id }).eq('id', tgtSchedule.id),
         ])
+      }
+      // 두 날짜의 월이 다를 수 있으므로 두 월 모두 재계산
+      const months = new Set([
+        `${ex.requester_date.slice(0, 7)}`,
+        `${ex.target_date.slice(0, 7)}`,
+      ])
+      for (const ym of months) {
+        const [y, m] = ym.split('-').map(Number)
+        await recalculateBalance(db as ReturnType<typeof createAdminClient>, y, m)
       }
     }
     if (ex.type === 'transfer') {
-      await supabase.from('schedules').update({ user_id: ex.target_id }).eq('date', ex.requester_date)
+      await db.from('schedules').update({ user_id: ex.target_id }).eq('date', ex.requester_date)
+      const [y, m] = ex.requester_date.slice(0, 7).split('-').map(Number)
+      await recalculateBalance(db as ReturnType<typeof createAdminClient>, y, m)
     }
   }
 
-  await supabase.from('exchange_requests').update({ status: newStatus, responded_at: new Date().toISOString() }).eq('id', exchangeId)
+  await db.from('exchange_requests').update({ status: newStatus, responded_at: new Date().toISOString() }).eq('id', exchangeId)
 
   await supabase.from('notifications').insert({
     user_id: ex.requester_id,

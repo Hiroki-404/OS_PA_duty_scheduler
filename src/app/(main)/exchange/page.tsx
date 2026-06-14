@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { ExchangeRequestModal } from '@/components/exchange/ExchangeRequestModal'
-import { ExchangeNotificationBanner } from '@/components/exchange/ExchangeNotificationBanner'
 import { Badge } from '@/components/ui/Badge'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -182,9 +181,21 @@ export default function ExchangePage() {
     }
   }
 
+  const handleAccept = async (exchangeId: string) => {
+    const res = await fetch('/api/exchange', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exchangeId, action: 'accept' }),
+    })
+    if (res.ok) {
+      setRequests(prev =>
+        prev.map(r => r.id === exchangeId ? { ...r, status: 'accepted' } : r)
+      )
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <ExchangeNotificationBanner userId={currentUserId} />
       <header className="bg-white px-6 pt-12 pb-4 border-b border-gray-100">
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-xl font-bold text-gray-900">당직 교환</h1>
@@ -245,13 +256,21 @@ export default function ExchangePage() {
                   : r.requester_date}
               </p>
 
-              {/* 대기 상태 본인 요청만 취소 버튼 */}
+              {/* 신청자: 취소 / 피신청자: 수락 */}
               {r.status === 'pending' && r.requester_id === currentUserId && (
                 <button
                   onClick={() => handleCancel(r.id)}
                   className="mt-2 text-xs text-red-500 font-semibold hover:text-red-600 transition-colors"
                 >
                   신청 취소
+                </button>
+              )}
+              {r.status === 'pending' && r.target_id === currentUserId && (
+                <button
+                  onClick={() => handleAccept(r.id)}
+                  className="mt-2 text-xs text-emerald-600 font-semibold hover:text-emerald-700 transition-colors"
+                >
+                  요청 수락
                 </button>
               )}
             </motion.div>

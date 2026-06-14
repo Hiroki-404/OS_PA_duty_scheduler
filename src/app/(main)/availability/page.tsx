@@ -152,7 +152,7 @@ export default function AvailabilityPage() {
         holidaysData,
         { data: profiles },
         { data: allSubs },
-        { data: submissionFlags },
+        flagsResponse,
       ] = await Promise.all([
         sb.from('availability_requests')
           .select('date,type,submitted_at')
@@ -175,11 +175,10 @@ export default function AvailabilityPage() {
           .eq('month', targetMonth)
           .not('submitted_at', 'is', null)
           .order('submitted_at', { ascending: true }),
-        // 0개 제출자 감지: availability_requests 행 없어도 제출 완료 판별
-        sb.from('monthly_submission_flags')
-          .select('user_id,submitted_at')
-          .eq('year', targetYear)
-          .eq('month', targetMonth),
+        // 0개 제출자 감지: server API를 통해 admin client로 RLS 완전 우회
+        fetch(`/api/availability/flag?year=${targetYear}&month=${targetMonth}`)
+          .then(r => r.json())
+          .catch(() => ({ flags: [] })),
       ])
 
       const sel: Record<string, AvailabilityType> = {}
@@ -215,8 +214,8 @@ export default function AvailabilityPage() {
         datesByUser[s.user_id].push(s.date)
         submittedAtByUser[s.user_id] = s.submitted_at
       })
-      // 0개 제출자: availability_requests 행이 없어도 flags 테이블로 제출 완료 감지
-      ;(submissionFlags ?? []).forEach((f: any) => {
+      // 0개 제출자: server API가 반환한 flags로 제출 완료 감지 (RLS 우회됨)
+      ;((flagsResponse as any)?.flags ?? []).forEach((f: any) => {
         if (!submittedAtByUser[f.user_id]) {
           submittedAtByUser[f.user_id] = f.submitted_at
         }

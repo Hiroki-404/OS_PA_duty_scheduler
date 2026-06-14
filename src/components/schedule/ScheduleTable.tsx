@@ -56,11 +56,14 @@ export function ScheduleTable({
   }
 
   // 교환 확정 맵: date → { partnerId, partnerDate, type }
+  // 스왑 후 셀에 표시되는 사람은 상대방이므로, partnerId는 원래 배정자(= 반대편)를 가리켜야 함
   const exchangeMap: Record<string, { partnerId: string; partnerDate: string | null; type: string }> = {}
   for (const ex of (exchanges ?? [])) {
-    exchangeMap[ex.requester_date] = { partnerId: ex.target_id,   partnerDate: ex.target_date,    type: ex.type }
+    // requester_date 셀: accept 후 target이 배정됨 → partner는 원래 requester
+    exchangeMap[ex.requester_date] = { partnerId: ex.requester_id, partnerDate: ex.target_date,    type: ex.type }
     if (ex.type === 'swap' && ex.target_date) {
-      exchangeMap[ex.target_date] = { partnerId: ex.requester_id, partnerDate: ex.requester_date, type: ex.type }
+      // target_date 셀: accept 후 requester가 배정됨 → partner는 원래 target
+      exchangeMap[ex.target_date] = { partnerId: ex.target_id,   partnerDate: ex.requester_date, type: ex.type }
     }
   }
 
