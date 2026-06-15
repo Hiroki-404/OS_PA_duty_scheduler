@@ -373,7 +373,7 @@ export default function AvailabilityPage() {
           </div>
         )}
 
-        {!dataLoading && hasSubmitted && workers.length > 0 && (
+        {!dataLoading && workers.length > 0 && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <h2 className="text-sm font-bold text-gray-700 mb-3">팀 제출 현황</h2>
             <div className="space-y-3">
