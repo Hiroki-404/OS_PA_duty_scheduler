@@ -60,7 +60,9 @@ export function GenerateButton({ year, month, hasSchedules }: Props) {
       disabled={loading}
       className="bg-toss-blue text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-60"
     >
-      {loading ? '⏳' : '배정 실행'}
+      {loading
+        ? <span className="inline-block w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+        : '배정 실행'}
     </motion.button>
   )
 }

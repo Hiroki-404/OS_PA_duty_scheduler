@@ -126,6 +126,7 @@ export default function AvailabilityPage() {
   const [done, setDone]                   = useState<DoneState>('idle')
   const [workers, setWorkers]             = useState<WorkerWithDates[]>([])
   const [currentUserId, setCurrentUserId] = useState('')
+  const [dataLoading, setDataLoading]     = useState(true)
 
   const isDirty = JSON.stringify(selections) !== JSON.stringify(initialRef.current)
 
@@ -138,6 +139,7 @@ export default function AvailabilityPage() {
     setHolidays([])
     setHolidaySet(new Set())
     setWorkers([])
+    setDataLoading(true)
 
     const sb = createClient()
     const pad = (n: number) => String(n).padStart(2, '0')
@@ -234,6 +236,7 @@ export default function AvailabilityPage() {
         return 0
       })
       setWorkers(workerList)
+      setDataLoading(false)
     })()
   }, [targetYear, targetMonth])
 
@@ -355,7 +358,22 @@ export default function AvailabilityPage() {
           </Button>
         </div>
 
-        {hasSubmitted && workers.length > 0 && (
+        {dataLoading && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm animate-pulse">
+            <div className="h-4 w-28 bg-gray-100 rounded mb-3" />
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex items-center gap-3 p-4 rounded-2xl bg-gray-50 mb-2">
+                <div className="w-9 h-9 rounded-full bg-gray-200 shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-24 bg-gray-200 rounded" />
+                  <div className="h-2 w-16 bg-gray-100 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!dataLoading && hasSubmitted && workers.length > 0 && (
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <h2 className="text-sm font-bold text-gray-700 mb-3">팀 제출 현황</h2>
             <div className="space-y-3">

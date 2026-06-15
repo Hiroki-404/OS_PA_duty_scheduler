@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -15,6 +15,7 @@ function getYearOptions(now: Date): number[] {
 
 export function YearMonthSelector({ year, month }: Props) {
   const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const now = new Date()
   const yearOptions = getYearOptions(now)
 
@@ -29,17 +30,20 @@ export function YearMonthSelector({ year, month }: Props) {
   }
 
   const handleSelect = (y: number, m: number) => {
-    router.push(`?year=${y}&month=${m}`)
     setOpen(false)
+    startTransition(() => { router.push(`?year=${y}&month=${m}`) })
   }
 
   return (
     <>
       <button
         onClick={handleOpen}
-        className="flex items-center gap-1 bg-gray-100 rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700"
+        disabled={isPending}
+        className="flex items-center gap-1.5 bg-gray-100 rounded-xl px-3 py-1.5 text-sm font-bold text-gray-700 disabled:opacity-70 min-w-[90px] justify-center"
       >
-        {year}년 {month}월 <span className="text-gray-400 text-xs">▾</span>
+        {isPending
+          ? <span className="inline-block w-4 h-4 rounded-full border-2 border-gray-500 border-t-transparent animate-spin" />
+          : <>{year}년 {month}월 <span className="text-gray-400 text-xs">▾</span></>}
       </button>
 
       <AnimatePresence>

@@ -32,7 +32,7 @@ export default function LoginPage() {
           className="w-full bg-[#FEE500] text-[#191919] font-bold py-4 rounded-2xl flex items-center justify-center gap-3 shadow-sm disabled:opacity-60"
         >
           {loading
-            ? <span className="animate-spin">⏳</span>
+            ? <span className="inline-block w-5 h-5 rounded-full border-2 border-[#191919] border-t-transparent animate-spin" />
             : <>
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M10 2C5.58 2 2 4.92 2 8.5c0 2.3 1.48 4.32 3.72 5.48L4.8 17.16c-.08.3.24.54.5.36L9.14 14.9c.28.03.57.04.86.04 4.42 0 8-2.92 8-6.5S14.42 2 10 2z" fill="#191919"/>

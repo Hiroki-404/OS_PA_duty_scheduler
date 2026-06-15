@@ -38,7 +38,9 @@ export function ResetButton({ year, month }: Props) {
       disabled={loading}
       className="bg-gray-100 text-gray-700 text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-60 hover:bg-gray-200 transition-colors"
     >
-      {loading ? '⏳' : '초기화'}
+      {loading
+        ? <span className="inline-block w-4 h-4 rounded-full border-2 border-gray-600 border-t-transparent animate-spin" />
+        : '초기화'}
     </motion.button>
   )
 }

@@ -33,7 +33,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...(props as any)}
     >
-      {loading ? <span className="inline-block animate-spin">⏳</span> : children}
+      {loading
+        ? <span className="inline-block w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        : children}
     </motion.button>
   )
 )
