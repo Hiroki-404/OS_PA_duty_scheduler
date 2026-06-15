@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ExchangeRequestModal } from '@/components/exchange/ExchangeRequestModal'
 import { Badge } from '@/components/ui/Badge'
@@ -94,8 +95,10 @@ export default function ExchangePage() {
   const [scheduleMap, setScheduleMap] = useState<Record<string, string>>({})
   const [requests, setRequests]       = useState<any[]>([])
   const [profiles, setProfiles]       = useState<Record<string, string>>({})
+  const [isAdmin, setIsAdmin] = useState(false)
   const [loadingCancelId, setLoadingCancelId] = useState<string | null>(null)
   const [loadingAcceptId, setLoadingAcceptId] = useState<string | null>(null)
+  const [loadingRollbackId, setLoadingRollbackId] = useState<string | null>(null)
 
   // 교환 내역 조회 필터 — 기본값: 현재 월
   const [filterYear, setFilterYear]   = useState(now.getFullYear())
@@ -125,7 +128,7 @@ export default function ExchangePage() {
         { data: allSchedules },
         { data: reqs },
       ] = await Promise.all([
-        sb.from('profiles').select('id,name').eq('is_active', true),
+        sb.from('profiles').select('id,name,is_admin').eq('is_active', true),
         sb.from('schedules').select('date').eq('user_id', user.id)
           .gte('date', curStart).lte('date', curEnd),
         sb.from('schedules').select('date').eq('user_id', user.id)
@@ -139,6 +142,7 @@ export default function ExchangePage() {
 
       setWorkers(profs ?? [])
       setProfiles(Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.name])))
+      setIsAdmin((profs ?? []).find((p: any) => p.id === user.id)?.is_admin ?? false)
       setMyCurrentDates((curSchedules ?? []).map((s: any) => s.date))
       setMyNextDates((nxtSchedules ?? []).map((s: any) => s.date))
       setScheduleMap(Object.fromEntries((allSchedules ?? []).map((s: any) => [s.date, s.user_id])))
@@ -198,6 +202,20 @@ export default function ExchangePage() {
       )
     }
     setLoadingAcceptId(null)
+  }
+
+  const handleRollback = async (exchangeId: string) => {
+    if (!confirm('이 교환 내역을 강제 삭제하고 당직을 원상복구하시겠습니까?')) return
+    setLoadingRollbackId(exchangeId)
+    const res = await fetch('/api/exchange', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exchangeId, action: 'rollback' }),
+    })
+    if (res.ok) {
+      setRequests(prev => prev.filter(r => r.id !== exchangeId))
+    }
+    setLoadingRollbackId(null)
   }
 
   // 교환 상태 실시간 동기화 — 수락/거절 시 양쪽 화면 즉시 갱신
@@ -283,29 +301,45 @@ export default function ExchangePage() {
                   : r.requester_date}
               </p>
 
-              {/* 신청자: 취소 / 피신청자: 수락 */}
-              {r.status === 'pending' && r.requester_id === currentUserId && (
-                <button
-                  onClick={() => handleCancel(r.id)}
-                  disabled={loadingCancelId === r.id}
-                  className="mt-2 flex items-center gap-1.5 text-xs text-red-500 font-semibold hover:text-red-600 transition-colors disabled:opacity-50"
-                >
-                  {loadingCancelId === r.id
-                    ? <span className="inline-block w-3 h-3 rounded-full border-2 border-red-500 border-t-transparent animate-spin" />
-                    : '신청 취소'}
-                </button>
-              )}
-              {r.status === 'pending' && r.target_id === currentUserId && (
-                <button
-                  onClick={() => handleAccept(r.id)}
-                  disabled={loadingAcceptId === r.id}
-                  className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 font-semibold hover:text-emerald-700 transition-colors disabled:opacity-50"
-                >
-                  {loadingAcceptId === r.id
-                    ? <span className="inline-block w-3 h-3 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
-                    : '요청 수락'}
-                </button>
-              )}
+              {/* 신청자: 취소 / 피신청자: 수락 / 관리자: 강제 롤백 */}
+              <div className="flex items-center justify-between mt-2">
+                <div>
+                  {r.status === 'pending' && r.requester_id === currentUserId && (
+                    <button
+                      onClick={() => handleCancel(r.id)}
+                      disabled={loadingCancelId === r.id}
+                      className="flex items-center gap-1.5 text-xs text-red-500 font-semibold hover:text-red-600 transition-colors disabled:opacity-50"
+                    >
+                      {loadingCancelId === r.id
+                        ? <span className="inline-block w-3 h-3 rounded-full border-2 border-red-500 border-t-transparent animate-spin" />
+                        : '신청 취소'}
+                    </button>
+                  )}
+                  {r.status === 'pending' && r.target_id === currentUserId && (
+                    <button
+                      onClick={() => handleAccept(r.id)}
+                      disabled={loadingAcceptId === r.id}
+                      className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold hover:text-emerald-700 transition-colors disabled:opacity-50"
+                    >
+                      {loadingAcceptId === r.id
+                        ? <span className="inline-block w-3 h-3 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
+                        : '요청 수락'}
+                    </button>
+                  )}
+                </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleRollback(r.id)}
+                    disabled={loadingRollbackId === r.id}
+                    className="flex items-center justify-center w-7 h-7 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    title="강제 삭제 및 롤백 (관리자)"
+                  >
+                    {loadingRollbackId === r.id
+                      ? <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
+                      : <Trash2 size={14} />}
+                  </button>
+                )}
+              </div>
             </motion.div>
           ))
         )}

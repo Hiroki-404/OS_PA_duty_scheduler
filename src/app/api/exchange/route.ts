@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { exchangeId, action } = await request.json()
-  if (!exchangeId || !['accept', 'reject'].includes(action)) {
+  if (!exchangeId || !['accept', 'reject', 'rollback'].includes(action)) {
     return NextResponse.json({ error: 'Invalid params' }, { status: 400 })
   }
 
@@ -112,6 +112,37 @@ export async function PATCH(request: NextRequest) {
     .from('exchange_requests').select('*').eq('id', exchangeId).single()
 
   if (fetchErr || !ex) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // 관리자 강제 롤백 — 당직 원상복구 후 교환 레코드 삭제
+  if (action === 'rollback') {
+    const { data: adminProfile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+    if (!adminProfile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    if (ex.status === 'accepted') {
+      if (ex.type === 'swap' && ex.target_date) {
+        // 맞교환 롤백: 각 날짜를 원래 소유자로 되돌림
+        await Promise.all([
+          db.from('schedules').update({ user_id: ex.requester_id }).eq('date', ex.requester_date),
+          db.from('schedules').update({ user_id: ex.target_id }).eq('date', ex.target_date),
+        ])
+        const months = new Set([ex.requester_date.slice(0, 7), ex.target_date.slice(0, 7)])
+        for (const ym of months) {
+          const [y, m] = ym.split('-').map(Number)
+          await recalculateBalance(db as AnySupabaseClient, y, m)
+        }
+      }
+      if (ex.type === 'transfer') {
+        // 일방 교체 롤백: 원래 신청자가 해당 날짜 당직 복귀
+        await db.from('schedules').update({ user_id: ex.requester_id }).eq('date', ex.requester_date)
+        const [y, m] = ex.requester_date.slice(0, 7).split('-').map(Number)
+        await recalculateBalance(db as AnySupabaseClient, y, m)
+      }
+    }
+
+    await db.from('exchange_requests').delete().eq('id', exchangeId)
+    return NextResponse.json({ success: true })
+  }
+
   if (ex.target_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (ex.status !== 'pending') return NextResponse.json({ error: 'Already resolved' }, { status: 409 })
 
