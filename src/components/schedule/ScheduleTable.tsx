@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface ScheduleEntry {
@@ -18,9 +18,12 @@ interface ExchangeInfo {
   type: 'swap' | 'transfer'
 }
 
+interface WorkerItem { id: string; name: string; color: string }
+
 interface Props {
   schedules: ScheduleEntry[]
   workerMap: Record<string, WorkerInfo>
+  allWorkers?: WorkerItem[]
   year: number
   month: number
   holidays: Holiday[]
@@ -28,6 +31,7 @@ interface Props {
   exchanges?: ExchangeInfo[]
   isAdmin?: boolean
   onCellClick?: (date: string, currentUserId: string | null) => void
+  onOverride?: (scheduleId: string, newUserId: string, date: string) => Promise<void>
 }
 
 const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토']
@@ -40,10 +44,18 @@ const AVAIL_STYLE: Record<string, { label: string; bg: string; text: string; dot
 }
 
 export function ScheduleTable({
-  schedules, workerMap, year, month,
-  holidays, availabilities, exchanges, isAdmin, onCellClick,
+  schedules, workerMap, allWorkers, year, month,
+  holidays, availabilities, exchanges, isAdmin, onCellClick, onOverride,
 }: Props) {
   const [sheetDate, setSheetDate] = useState<string | null>(null)
+  const [overrideDropdownOpen, setOverrideDropdownOpen] = useState(false)
+  const [overriding, setOverriding] = useState(false)
+
+  // 바텀시트 날짜가 바뀔 때마다 드롭다운 상태 초기화
+  useEffect(() => {
+    setOverrideDropdownOpen(false)
+    setOverriding(false)
+  }, [sheetDate])
 
   const today       = new Date().toISOString().slice(0, 10)
   const scheduleMap = Object.fromEntries(schedules.map(s => [s.date, s]))
@@ -83,6 +95,16 @@ export function ScheduleTable({
   const sheetDayObj   = sheetDate ? new Date(sheetDate + 'T00:00:00') : null
   const sheetHolName  = sheetDate ? holidayMap[sheetDate] : null
   const sheetExchange = sheetDate ? exchangeMap[sheetDate] : null
+
+  // 드롭다운 필터: 해당 날짜에 제외/연차 신청한 근무자 제거 (반차는 배정 허용)
+  const sheetExcludedIds = new Set(
+    sheetDate
+      ? (availMap[sheetDate] ?? [])
+          .filter(a => a.type === 'exclude' || a.type === 'annual_leave')
+          .map(a => a.user_id)
+      : []
+  )
+  const filteredWorkers = (allWorkers ?? []).filter(w => !sheetExcludedIds.has(w.id))
 
   return (
     <>
@@ -263,6 +285,61 @@ export function ScheduleTable({
                     <p className="text-sm text-gray-400 italic">배정 없음</p>
                   )}
                 </section>
+
+                {/* 관리자 수동 교체 */}
+                {isAdmin && sheetSchedule && onOverride && (
+                  <section>
+                    <p className="text-xs font-bold text-gray-400 mb-2">수동 교체 (관리자)</p>
+                    {!overrideDropdownOpen ? (
+                      <button
+                        onClick={() => setOverrideDropdownOpen(true)}
+                        className="w-full py-2.5 rounded-xl text-sm font-semibold text-toss-blue bg-blue-50 border border-blue-100 active:bg-blue-100 transition-colors"
+                      >
+                        당직자 교체
+                      </button>
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-2xl border border-gray-100 overflow-hidden shadow-sm"
+                      >
+                        {overriding ? (
+                          <div className="py-6 flex justify-center">
+                            <span className="inline-block w-5 h-5 rounded-full border-2 border-toss-blue border-t-transparent animate-spin" />
+                          </div>
+                        ) : (
+                          filteredWorkers.map((w, i) => {
+                            const isCurrent = w.id === sheetSchedule.user_id
+                            return (
+                              <button
+                                key={w.id}
+                                disabled={isCurrent}
+                                onClick={async () => {
+                                  setOverriding(true)
+                                  await onOverride(sheetSchedule.id, w.id, sheetDate!)
+                                  setOverriding(false)
+                                  setOverrideDropdownOpen(false)
+                                  setSheetDate(null)
+                                }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 transition-colors
+                                  ${i > 0 ? 'border-t border-gray-50' : ''}
+                                  ${isCurrent ? 'bg-blue-50 cursor-default' : 'active:bg-gray-50'}`}
+                              >
+                                <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: w.color }} />
+                                <span className={`text-sm ${isCurrent ? 'font-bold text-toss-blue' : 'font-medium text-gray-800'}`}>
+                                  {w.name}
+                                </span>
+                                {isCurrent && (
+                                  <span className="ml-auto text-xs text-toss-blue font-semibold">현재</span>
+                                )}
+                              </button>
+                            )
+                          })
+                        )}
+                      </motion.div>
+                    )}
+                  </section>
+                )}
 
                 {/* 신청 내역 */}
                 {sheetAvails.length > 0 && (

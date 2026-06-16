@@ -3,11 +3,10 @@ export const revalidate = 0
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getHolidaysForMonth } from '@/lib/holidays/cache'
-import { ScheduleTable } from '@/components/schedule/ScheduleTable'
+import { AdminScheduleSection } from '@/components/schedule/AdminScheduleSection'
 import { GenerateButton } from '@/components/schedule/GenerateButton'
 import { ResetButton } from '@/components/schedule/ResetButton'
 import { YearMonthSelector } from '@/components/schedule/YearMonthSelector'
-import { DowStatsTable } from '@/components/schedule/DowStatsTable'
 
 // 파스텔 무지개 팔레트 — 설정 탭 피커와 동일한 12색 폴백
 const PALETTE = [
@@ -87,6 +86,10 @@ export default async function HomePage({ searchParams }: Props) {
   })
 
   const hasSchedules = scheduleList.length > 0
+  const isAdmin = profile?.is_admin ?? false
+
+  // 드롭다운 필터링용 전체 근무자 배열
+  const allWorkers = Object.entries(workerMap).map(([id, info]) => ({ id, ...info }))
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -94,7 +97,7 @@ export default async function HomePage({ searchParams }: Props) {
         <div className="flex items-center justify-end gap-2">
           <div className="flex items-center gap-2 shrink-0">
             <YearMonthSelector year={year} month={month} />
-            {profile?.is_admin && (
+            {isAdmin && (
               <>
                 <ResetButton year={year} month={month} />
                 <GenerateButton year={year} month={month} hasSchedules={hasSchedules} />
@@ -105,27 +108,18 @@ export default async function HomePage({ searchParams }: Props) {
       </header>
 
       <div className="px-4 py-4 space-y-4">
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <ScheduleTable
-            schedules={scheduleList}
-            workerMap={workerMap}
-            year={year}
-            month={month}
-            holidays={holidays}
-            availabilities={availabilities ?? []}
-            exchanges={exchanges}
-          />
-        </div>
-
-        {hasSchedules && (
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <h2 className="text-sm font-bold text-gray-700 mb-3">요일별 당직 통계</h2>
-            <DowStatsTable
-              schedules={scheduleList}
-              workerMap={workerMap}
-            />
-          </div>
-        )}
+        <AdminScheduleSection
+          schedules={scheduleList}
+          workerMap={workerMap}
+          allWorkers={allWorkers}
+          year={year}
+          month={month}
+          holidays={holidays}
+          availabilities={availabilities ?? []}
+          exchanges={exchanges}
+          isAdmin={isAdmin}
+          hasSchedules={hasSchedules}
+        />
       </div>
     </div>
   )
