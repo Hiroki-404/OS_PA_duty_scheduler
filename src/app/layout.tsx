@@ -13,14 +13,14 @@ export const metadata: Metadata = {
   },
   icons: {
     apple: [
-      { url: '/icon-512x512.png', sizes: '512x512', type: 'image/png' },
-      { url: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon1-2-512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icon1-2-192.png', sizes: '192x192', type: 'image/png' },
     ],
     icon: [
-      { url: '/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icon1-2-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon1-2-512.png', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: '/icon-192x192.png',
+    shortcut: '/icon1-2-192.png',
   },
 }
 
@@ -35,10 +35,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <head>
-        <link rel="apple-touch-icon" sizes="512x512" href="/icon-512x512.png" />
-        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192x192.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192x192.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512x512.png" />
+        <link rel="apple-touch-icon" sizes="512x512" href="/icon1-2-512.png" />
+        <link rel="apple-touch-icon" sizes="192x192" href="/icon1-2-192.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon1-2-192.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon1-2-512.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="OS PA" />
