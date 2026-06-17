@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/availability-reminder",
+      "schedule": "0 23 22 * *"
+    },
+    {
+      "path": "/api/cron/availability-overdue",
+      "schedule": "0 23 23 * *"
+    }
+  ]
+}

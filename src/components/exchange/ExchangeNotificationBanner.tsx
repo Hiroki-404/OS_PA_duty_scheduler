@@ -3,56 +3,50 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 
-interface ExchangeNotification {
+interface NotifRow {
   id: string
-  payload: {
-    exchange_id: string
-    requester_name: string
-    requester_date: string
-    target_date?: string
-    type: 'swap' | 'transfer'
-  }
+  title: string
+  content: string
+  landing_tab: string
 }
 
 interface Props { userId: string }
 
 export function ExchangeNotificationBanner({ userId }: Props) {
-  const [pending, setPending] = useState<ExchangeNotification[]>([])
+  const [pending, setPending] = useState<NotifRow[]>([])
 
   useEffect(() => {
     if (!userId) return
     const sb = createClient()
 
     sb.from('notifications')
-      .select('id, payload')
-      .eq('user_id', userId)
-      .eq('type', 'exchange_request')
+      .select('id, title, content, landing_tab')
+      .eq('receiver_id', userId)
+      .eq('landing_tab', 'exchange')
       .eq('is_read', false)
-      .then(({ data }) => {
-        if (data) setPending(data as ExchangeNotification[])
-      })
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data }) => { if (data) setPending(data as NotifRow[]) })
 
-    const channel = sb.channel(`notif-${userId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        payload => {
-          if (payload.new.type === 'exchange_request') {
-            setPending(prev => [...prev, payload.new as ExchangeNotification])
+    const channel = sb.channel(`notif-banner-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${userId}` },
+        (payload) => {
+          if (!payload.new.is_read && payload.new.landing_tab === 'exchange') {
+            setPending(prev => [payload.new as NotifRow, ...prev])
           }
-        })
+        },
+      )
       .subscribe()
 
     return () => { sb.removeChannel(channel) }
   }, [userId])
 
-  const handleRespond = async (notifId: string, exchangeId: string, approve: boolean) => {
+  const dismiss = async (id: string) => {
     const sb = createClient()
-    await fetch('/api/exchange', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ exchangeId, action: approve ? 'accept' : 'reject' }),
-    })
-    await sb.from('notifications').update({ is_read: true }).eq('id', notifId)
-    setPending(prev => prev.filter(n => n.id !== notifId))
+    await sb.from('notifications').update({ is_read: true }).eq('id', id)
+    setPending(prev => prev.filter(n => n.id !== id))
   }
 
   const first = pending[0]
@@ -67,22 +61,12 @@ export function ExchangeNotificationBanner({ userId }: Props) {
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-b border-gray-100 shadow-lg z-50 px-4 py-3"
         >
-          <p className="text-sm font-semibold text-gray-900">
-            {first.payload.requester_name}님의 교환 요청
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {first.payload.requester_date}
-            {first.payload.type === 'swap' && first.payload.target_date && ` ↔ ${first.payload.target_date}`}
-          </p>
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => handleRespond(first.id, first.payload.exchange_id, true)}
-              className="flex-1 bg-toss-blue text-white text-sm font-semibold py-2 rounded-xl"
-            >수락</button>
-            <button
-              onClick={() => handleRespond(first.id, first.payload.exchange_id, false)}
-              className="flex-1 bg-gray-100 text-gray-700 text-sm font-semibold py-2 rounded-xl"
-            >거절</button>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{first.title}</p>
+              <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-line">{first.content}</p>
+            </div>
+            <button onClick={() => dismiss(first.id)} className="text-gray-300 hover:text-gray-500 shrink-0 mt-0.5">✕</button>
           </div>
           {pending.length > 1 && (
             <p className="text-xs text-gray-400 mt-1 text-center">+{pending.length - 1}건 더</p>

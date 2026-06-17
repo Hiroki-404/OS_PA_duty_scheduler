@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { sendPushToUser, saveNotification, fmtDate } from '@/lib/push'
 
 type AnySupabaseClient = ReturnType<typeof createAdminClient>
 
-// 교환 수락 후 영향받은 월의 monthly_balance 재계산
 async function recalculateBalance(db: AnySupabaseClient, year: number, month: number) {
   const pad = (n: number) => String(n).padStart(2, '0')
   const monthStart = `${year}-${pad(month)}-01`
@@ -80,18 +80,24 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: requesterProfile } = await supabase.from('profiles').select('name').eq('id', user.id).single()
-  await supabase.from('notifications').insert({
-    user_id: targetId,
-    type: 'exchange_request',
-    payload: {
-      exchange_id: req.id,
-      requester_name: requesterProfile?.name ?? '알 수 없음',
-      requester_date: requesterDate,
-      target_date: targetDate,
-      type,
-    },
-  })
+  const db = createAdminClient()
+  const { data: requesterProfile } = await db.from('profiles').select('name').eq('id', user.id).single()
+  const requesterName = requesterProfile?.name ?? '알 수 없음'
+
+  let title: string
+  let content: string
+  if (type === 'swap' && targetDate) {
+    title = '당직 교환 신청'
+    content = `${fmtDate(targetDate)} 당직 교환 신청\n신청자: ${requesterName}(${fmtDate(requesterDate)})`
+  } else {
+    title = '당직 대신 요청'
+    content = `${fmtDate(requesterDate)}에 당직 대신 서주세요!\n신청자: ${requesterName}`
+  }
+
+  await Promise.all([
+    sendPushToUser(targetId, { title, body: content, url: '/exchange' }),
+    saveNotification(db, targetId, title, content, 'exchange'),
+  ])
 
   return NextResponse.json({ request: req }, { status: 201 })
 }
@@ -113,14 +119,13 @@ export async function PATCH(request: NextRequest) {
 
   if (fetchErr || !ex) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // 관리자 강제 롤백 — 당직 원상복구 후 교환 레코드 삭제
+  // 관리자 강제 롤백
   if (action === 'rollback') {
     const { data: adminProfile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
     if (!adminProfile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     if (ex.status === 'accepted') {
       if (ex.type === 'swap' && ex.target_date) {
-        // 맞교환 롤백: 각 날짜를 원래 소유자로 되돌림
         await Promise.all([
           db.from('schedules').update({ user_id: ex.requester_id }).eq('date', ex.requester_date),
           db.from('schedules').update({ user_id: ex.target_id }).eq('date', ex.target_date),
@@ -132,7 +137,6 @@ export async function PATCH(request: NextRequest) {
         }
       }
       if (ex.type === 'transfer') {
-        // 일방 교체 롤백: 원래 신청자가 해당 날짜 당직 복귀
         await db.from('schedules').update({ user_id: ex.requester_id }).eq('date', ex.requester_date)
         const [y, m] = ex.requester_date.slice(0, 7).split('-').map(Number)
         await recalculateBalance(db as AnySupabaseClient, y, m)
@@ -143,8 +147,14 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true })
   }
 
+  // 중복 수락 방어: 이미 처리된 요청 차단
   if (ex.target_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (ex.status !== 'pending') return NextResponse.json({ error: 'Already resolved' }, { status: 409 })
+  if (ex.status !== 'pending') {
+    return NextResponse.json(
+      { error: '이미 만료되거나 취소된 교환 요청입니다' },
+      { status: 409 }
+    )
+  }
 
   const newStatus = action === 'accept' ? 'accepted' : 'rejected'
 
@@ -158,11 +168,7 @@ export async function PATCH(request: NextRequest) {
           db.from('schedules').update({ user_id: reqSchedule.user_id }).eq('id', tgtSchedule.id),
         ])
       }
-      // 두 날짜의 월이 다를 수 있으므로 두 월 모두 재계산
-      const months = new Set([
-        `${ex.requester_date.slice(0, 7)}`,
-        `${ex.target_date.slice(0, 7)}`,
-      ])
+      const months = new Set([ex.requester_date.slice(0, 7), ex.target_date.slice(0, 7)])
       for (const ym of months) {
         const [y, m] = ym.split('-').map(Number)
         await recalculateBalance(db as AnySupabaseClient, y, m)
@@ -175,18 +181,34 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  await db.from('exchange_requests').update({ status: newStatus, responded_at: new Date().toISOString() }).eq('id', exchangeId)
+  await db.from('exchange_requests')
+    .update({ status: newStatus, responded_at: new Date().toISOString() })
+    .eq('id', exchangeId)
 
-  await supabase.from('notifications').insert({
-    user_id: ex.requester_id,
-    type: 'exchange_response',
-    payload: { exchange_id: exchangeId, status: newStatus, date: ex.requester_date },
-  })
+  // 수락/거절 완료 시 신청자에게 알림 발송
+  if (action === 'accept') {
+    const { data: targetProfile } = await db.from('profiles').select('name').eq('id', user.id).single()
+    const targetName = targetProfile?.name ?? '알 수 없음'
+
+    let title: string
+    let content: string
+    if (ex.type === 'swap' && ex.target_date) {
+      title = '교환 수락 완료'
+      content = `${fmtDate(ex.target_date)}로 교환 완료\n수락자: ${targetName}(${fmtDate(ex.requester_date)})`
+    } else {
+      title = '교환 수락 완료'
+      content = `${fmtDate(ex.requester_date)} 당직 ${targetName}에게 넘겨짐`
+    }
+
+    await Promise.all([
+      sendPushToUser(ex.requester_id, { title, body: content, url: '/exchange' }),
+      saveNotification(db as AnySupabaseClient, ex.requester_id, title, content, 'exchange'),
+    ])
+  }
 
   return NextResponse.json({ status: newStatus })
 }
 
-// 신청자 본인이 pending 상태 요청을 취소
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

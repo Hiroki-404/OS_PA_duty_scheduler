@@ -228,13 +228,18 @@ export async function PATCH(request: NextRequest) {
 
   if (lock) {
     const { data: workers } = await supabase.from('profiles').select('id').eq('is_active', true)
-    await supabase.from('notifications').insert(
-      (workers ?? []).map(w => ({
-        user_id: w.id,
-        type: 'schedule_published',
-        payload: { year, month },
-      }))
-    )
+    const title = '당직표 확정'
+    const content = `${year}년 ${month}월 당직표가 확정되었습니다.`
+    if (workers?.length) {
+      await supabase.from('notifications').insert(
+        workers.map(w => ({
+          receiver_id: w.id,
+          title,
+          content,
+          landing_tab: 'exchange',
+        }))
+      )
+    }
   }
 
   return NextResponse.json({ success: true })

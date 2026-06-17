@@ -40,9 +40,15 @@ export type Database = {
         Relationships: []
       }
       notifications: {
-        Row: { id: string; user_id: string; type: string; payload: Json; is_read: boolean; created_at: string }
-        Insert: { user_id: string; type: string; payload?: Json; is_read?: boolean }
+        Row: { id: string; receiver_id: string; title: string; content: string; landing_tab: string; is_read: boolean; created_at: string }
+        Insert: { receiver_id: string; title: string; content: string; landing_tab?: string; is_read?: boolean }
         Update: { is_read?: boolean }
+        Relationships: []
+      }
+      user_push_tokens: {
+        Row: { id: string; user_id: string; endpoint: string; p256dh: string; auth: string; created_at: string }
+        Insert: { user_id: string; endpoint: string; p256dh: string; auth: string }
+        Update: { p256dh?: string; auth?: string }
         Relationships: []
       }
       worker_periods: {
