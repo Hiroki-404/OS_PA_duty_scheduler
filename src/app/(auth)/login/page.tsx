@@ -20,7 +20,13 @@ export default function LoginPage() {
         className="w-full max-w-sm flex flex-col items-center gap-12"
       >
         <div className="text-center space-y-3">
-          <div className="text-5xl">🏥</div>
+          <img
+            src="/icon2.png"
+            alt="고대안산병원 OS"
+            className="mx-auto mb-1"
+            style={{ width: 96, height: 'auto' }}
+            draggable={false}
+          />
           <h1 className="text-2xl font-bold text-gray-900">고대안산병원OS</h1>
           <p className="text-gray-400 text-sm">PA 당직 관리 시스템</p>
         </div>

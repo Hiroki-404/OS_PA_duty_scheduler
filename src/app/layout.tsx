@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar'
+import { SplashScreen } from '@/components/SplashScreen'
 
 export const metadata: Metadata = {
   title: '당직표',
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-title" content="OS PA" />
       </head>
       <body>
+        <SplashScreen />
         <ServiceWorkerRegistrar />
         {children}
       </body>

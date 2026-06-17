@@ -1,9 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 
-// 로고 엣지 픽셀 추출값 — manifest.ts / globals.css와 동기화
-const SPLASH_BG = '#F5F5F5'
-
 export function SplashScreen() {
   const [phase, setPhase] = useState<'visible' | 'fading' | 'gone'>('visible')
 
@@ -32,21 +29,20 @@ export function SplashScreen() {
 
   return (
     <div
-      style={{ backgroundColor: SPLASH_BG }}
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white
         transition-opacity duration-300 ease-out pointer-events-none
         ${phase === 'fading' ? 'opacity-0' : 'opacity-100'}`}
       aria-hidden="true"
     >
-      {/* 로고 — 화면 너비의 28% (최대 160px) */}
+      {/* icon2 — 스플래시 로고, 화면 너비 28% (최대 140px) */}
       <img
-        src="/icon-512x512.png"
+        src="/icon2.png"
         alt=""
-        style={{ width: 'min(28vw, 160px)', height: 'auto' }}
+        style={{ width: 'min(28vw, 140px)', height: 'auto' }}
         draggable={false}
       />
       {/* 원형 CSS 스피너 — 로고 하단 28px */}
-      <div className="mt-7 w-8 h-8 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
+      <div className="mt-7 w-7 h-7 rounded-full border-2 border-gray-200 border-t-transparent animate-spin" />
     </div>
   )
 }
