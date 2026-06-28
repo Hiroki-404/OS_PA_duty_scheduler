@@ -14,14 +14,26 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && !isPublic) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('employee_id')
-      .eq('id', user.id)
-      .single()
+    // 온보딩 완료 유저는 쿠키로 판별 → DB 쿼리 스킵 (매 요청마다 profiles 조회 방지)
+    const onboarded = request.cookies.get('_ob')?.value === user.id
+    if (!onboarded) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('employee_id')
+        .eq('id', user.id)
+        .single()
 
-    if (!profile?.employee_id && !pathname.startsWith('/onboarding')) {
-      return NextResponse.redirect(new URL('/onboarding', request.url))
+      if (!profile?.employee_id && !pathname.startsWith('/onboarding')) {
+        return NextResponse.redirect(new URL('/onboarding', request.url))
+      }
+
+      if (profile?.employee_id) {
+        supabaseResponse.cookies.set('_ob', user.id, {
+          maxAge: 60 * 60 * 24 * 30,
+          path: '/',
+          sameSite: 'lax',
+        })
+      }
     }
   }
 

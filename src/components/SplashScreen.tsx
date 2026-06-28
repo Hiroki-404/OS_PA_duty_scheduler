@@ -13,9 +13,9 @@ export function SplashScreen() {
     }
 
     if (document.readyState === 'complete') {
-      timer = setTimeout(dismiss, 700)
+      timer = setTimeout(dismiss, 100)
     } else {
-      const onLoad = () => { timer = setTimeout(dismiss, 700) }
+      const onLoad = () => { timer = setTimeout(dismiss, 100) }
       window.addEventListener('load', onLoad, { once: true })
       return () => {
         window.removeEventListener('load', onLoad)

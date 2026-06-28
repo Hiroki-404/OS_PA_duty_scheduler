@@ -25,7 +25,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   // 초기 인증 + 알림 미읽음 수 + 푸시 권한 체크
   useEffect(() => {
     const sb = createClient()
-    sb.auth.getUser().then(async ({ data: { user } }) => {
+    sb.auth.getSession().then(async ({ data: { session } }) => {
+      const user = session?.user
       if (!user) return
       setUserId(user.id)
 

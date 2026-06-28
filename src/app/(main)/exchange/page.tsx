@@ -5,6 +5,18 @@ import { Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ExchangeRequestModal } from '@/components/exchange/ExchangeRequestModal'
 import { Badge } from '@/components/ui/Badge'
+import { getCached, setCached, invalidateCache } from '@/lib/tab-cache'
+
+interface ExchangeCache {
+  userId: string
+  workers: Array<{ id: string; name: string; is_admin: boolean }>
+  myCurrentDates: string[]
+  myNextDates: string[]
+  scheduleMap: Record<string, string>
+  profiles: Record<string, string>
+  isAdmin: boolean
+  requests: any[]
+}
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '대기', accepted: '수락됨', rejected: '거절됨', cancelled: '취소됨'
@@ -110,10 +122,26 @@ export default function ExchangePage() {
   const nextYear     = currentMonth === 12 ? currentYear + 1 : currentYear
 
   useEffect(() => {
+    const cacheKey = `exchange-${currentYear}-${currentMonth}`
+
+    // 캐시 즉시 표시 (30초 TTL)
+    const cached = getCached<ExchangeCache>(cacheKey, 30_000)
+    if (cached) {
+      setCurrentUserId(cached.userId)
+      setWorkers(cached.workers)
+      setProfiles(cached.profiles)
+      setIsAdmin(cached.isAdmin)
+      setMyCurrentDates(cached.myCurrentDates)
+      setMyNextDates(cached.myNextDates)
+      setScheduleMap(cached.scheduleMap)
+      setRequests(cached.requests)
+    }
+
+    // getSession()으로 즉시 userId 획득 → 백그라운드 최신 데이터 로딩
     const sb = createClient()
-    sb.auth.getUser().then(async ({ data: { user } }) => {
+    sb.auth.getSession().then(async ({ data: { session } }) => {
+      const user = session?.user
       if (!user) return
-      setCurrentUserId(user.id)
 
       const pad = (n: number) => String(n).padStart(2, '0')
       const curStart = `${currentYear}-${pad(currentMonth)}-01`
@@ -140,13 +168,27 @@ export default function ExchangePage() {
           .order('requested_at', { ascending: false }),
       ])
 
-      setWorkers(profs ?? [])
-      setProfiles(Object.fromEntries((profs ?? []).map((p: any) => [p.id, p.name])))
-      setIsAdmin((profs ?? []).find((p: any) => p.id === user.id)?.is_admin ?? false)
-      setMyCurrentDates((curSchedules ?? []).map((s: any) => s.date))
-      setMyNextDates((nxtSchedules ?? []).map((s: any) => s.date))
-      setScheduleMap(Object.fromEntries((allSchedules ?? []).map((s: any) => [s.date, s.user_id])))
-      setRequests(reqs ?? [])
+      const workers    = profs ?? []
+      const profilesMap = Object.fromEntries(workers.map((p: any) => [p.id, p.name]))
+      const isAdminUser = workers.find((p: any) => p.id === user.id)?.is_admin ?? false
+      const curDates   = (curSchedules ?? []).map((s: any) => s.date)
+      const nxtDates   = (nxtSchedules ?? []).map((s: any) => s.date)
+      const sMap       = Object.fromEntries((allSchedules ?? []).map((s: any) => [s.date, s.user_id]))
+      const requests   = reqs ?? []
+
+      setCurrentUserId(user.id)
+      setWorkers(workers)
+      setProfiles(profilesMap)
+      setIsAdmin(isAdminUser)
+      setMyCurrentDates(curDates)
+      setMyNextDates(nxtDates)
+      setScheduleMap(sMap)
+      setRequests(requests)
+
+      setCached(cacheKey, {
+        userId: user.id, workers, profiles: profilesMap, isAdmin: isAdminUser,
+        myCurrentDates: curDates, myNextDates: nxtDates, scheduleMap: sMap, requests,
+      })
     })
   }, [currentYear, currentMonth, nextYear, nextMonth])
 
@@ -175,6 +217,7 @@ export default function ExchangePage() {
     if (res.ok) {
       const { request } = await res.json()
       setRequests(prev => [request, ...prev])
+      invalidateCache(`exchange-${currentYear}-${currentMonth}`)
     }
   }
 
@@ -185,6 +228,7 @@ export default function ExchangePage() {
       setRequests(prev =>
         prev.map(r => r.id === exchangeId ? { ...r, status: 'cancelled' } : r)
       )
+      invalidateCache(`exchange-${currentYear}-${currentMonth}`)
     }
     setLoadingCancelId(null)
   }
@@ -200,6 +244,7 @@ export default function ExchangePage() {
       setRequests(prev =>
         prev.map(r => r.id === exchangeId ? { ...r, status: 'accepted' } : r)
       )
+      invalidateCache(`exchange-${currentYear}-${currentMonth}`)
     }
     setLoadingAcceptId(null)
   }

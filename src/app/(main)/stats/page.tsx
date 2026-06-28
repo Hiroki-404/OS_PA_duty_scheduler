@@ -1,6 +1,10 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getCached, setCached } from '@/lib/tab-cache'
+
+const STATS_CACHE_KEY = 'stats-data'
+const STATS_TTL = 5 * 60_000
 import { motion, AnimatePresence } from 'framer-motion'
 
 const PALETTE = ['#4DABF7', '#FF6B6B', '#51CF66', '#FFD43B', '#CC5DE8', '#FF922B', '#20C997']
@@ -297,6 +301,23 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // 캐시 즉시 표시 (5분 TTL)
+    const cached = getCached<{ balances: RawBalance[]; profiles: Profile[] }>(STATS_CACHE_KEY, STATS_TTL)
+    if (cached) {
+      setAllBalances(cached.balances)
+      setProfiles(cached.profiles)
+      if (cached.balances.length > 0) {
+        const latest = cached.balances.reduce((prev, cur) => {
+          if (cur.year > prev.year) return cur
+          if (cur.year === prev.year && cur.month > prev.month) return cur
+          return prev
+        })
+        setYear(latest.year)
+        setMonth(latest.month)
+      }
+      setLoading(false)
+    }
+
     const sb = createClient()
     Promise.all([
       sb.from('monthly_balance').select('*').order('year').order('month'),
@@ -314,6 +335,7 @@ export default function StatsPage() {
         setMonth(latest.month)
       }
       setLoading(false)
+      setCached(STATS_CACHE_KEY, { balances: balances ?? [], profiles: profs ?? [] })
     })
   }, [])
 

@@ -145,7 +145,8 @@ export default function AvailabilityPage() {
     const pad = (n: number) => String(n).padStart(2, '0')
 
     ;(async () => {
-      const { data: { user } } = await sb.auth.getUser()
+      const { data: { session } } = await sb.auth.getSession()
+      const user = session?.user
       if (!user) return
       setCurrentUserId(user.id)
 

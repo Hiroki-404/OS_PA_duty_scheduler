@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/Toast'
 import { signOut } from '@/lib/kakao/auth'
 import { useRouter } from 'next/navigation'
 import { subscribeToPush, unsubscribeFromPush } from '@/lib/push-client'
+import { getCached, setCached } from '@/lib/tab-cache'
 
 interface ProfileRow { id: string; name: string; employee_id: string; is_admin: boolean; is_active: boolean; color: string | null }
 
@@ -33,12 +34,22 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const sb = createClient()
-    sb.auth.getUser().then(async ({ data: { user } }) => {
+
+    // 캐시 즉시 표시 (60초 TTL)
+    const cached = getCached<{ profiles: ProfileRow[]; userId: string }>('settings-profiles', 60_000)
+    if (cached) {
+      setProfiles(cached.profiles)
+      setCurrentUser(cached.profiles.find(p => p.id === cached.userId) ?? null)
+    }
+
+    sb.auth.getSession().then(async ({ data: { session } }) => {
+      const user = session?.user
       if (!user) return
       const { data } = await sb.from('profiles').select('*').order('name')
       if (data) {
         setProfiles(data)
         setCurrentUser(data.find(p => p.id === user.id) ?? null)
+        setCached('settings-profiles', { profiles: data, userId: user.id })
       }
     })
 
