@@ -15,19 +15,25 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(event.request))
 })
 
-// 웹 푸시 수신 → 시스템 알림 표시
+// 웹 푸시 수신 → 헤드업(팝업) 시스템 알림 표시
 self.addEventListener('push', (event) => {
   if (!event.data) return
   let payload
   try { payload = event.data.json() } catch { return }
 
-  const { title, body, data } = payload
+  const { title, body, data = {} } = payload
+  // 알림마다 고유 tag → 메시지가 겹치지 않고 각각 헤드업 표시
+  const tag = data.tag ?? ('duty-' + Date.now())
+
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
       icon: '/icon1-2-192.png',
       badge: '/icon1-2-192.png',
-      data: data ?? {},
+      data,
+      vibrate: [200, 100, 200],
+      tag,
+      renotify: true,
       requireInteraction: false,
     })
   )

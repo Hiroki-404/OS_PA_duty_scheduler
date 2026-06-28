@@ -37,6 +37,19 @@ interface Props {
 const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 const DOW_FULL   = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
 
+// 새벽 00:00~08:00은 전날 당직 시간 내부 → 전날 날짜를 "오늘"로 처리
+function getDutyDate(): string {
+  const now = new Date()
+  const base = now.getHours() < 8
+    ? new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    : now
+  return [
+    base.getFullYear(),
+    String(base.getMonth() + 1).padStart(2, '0'),
+    String(base.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 const AVAIL_STYLE: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   exclude:      { label: '제외', bg: 'bg-red-50',    text: 'text-red-500',    dot: 'bg-red-400' },
   half_day:     { label: '반차', bg: 'bg-orange-50', text: 'text-orange-500', dot: 'bg-orange-400' },
@@ -57,7 +70,7 @@ export function ScheduleTable({
     setOverriding(false)
   }, [sheetDate])
 
-  const today       = new Date().toISOString().slice(0, 10)
+  const today       = getDutyDate()
   const scheduleMap = Object.fromEntries(schedules.map(s => [s.date, s]))
   const holidayMap  = Object.fromEntries(holidays.map(h => [h.date, h.name]))
 

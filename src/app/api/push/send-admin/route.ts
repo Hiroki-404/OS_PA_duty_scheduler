@@ -8,7 +8,13 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+  // is_admin 체크와 name 조회를 단일 쿼리로
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin, name')
+    .eq('id', user.id)
+    .single()
+
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
@@ -19,12 +25,18 @@ export async function POST(request: NextRequest) {
   }
 
   const db = createAdminClient()
-  const title = '관리자 메시지'
+  // 발신자 이름(관리자 실명)을 title로, 실제 메시지를 body로
+  const adminName = (profile.name as string | null) ?? '관리자'
   const content = (message as string).trim()
 
   await Promise.all([
-    sendPushToUser(targetUserId, { title, body: content, url: '/settings' }),
-    saveNotification(db, targetUserId, title, content, 'exchange'),
+    sendPushToUser(targetUserId, {
+      title: adminName,
+      body: content,
+      url: '/settings',
+      tag: 'admin-message',
+    }),
+    saveNotification(db, targetUserId, adminName, content, 'exchange'),
   ])
 
   return NextResponse.json({ success: true })
